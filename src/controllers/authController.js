@@ -57,16 +57,6 @@ const loginUser = async (req, res) => {
   // Check if user exists
   const user = await User.findOne({ email });
 
-  if (!isValidGmail(email)) {
-    res.status(400);
-    throw new Error('Invalid email format. Only @gmail.com emails are allowed.');
-  }
-
-  if (phoneNumber && !isValidPhone(phoneNumber)) {
-    res.status(400);
-    throw new Error('Invalid phone number. Must be 10 digits and start with 6, 7, 8, or 9.');
-  }
-
   if (user && (await user.matchPassword(password))) {
     res.json({
       _id: user._id,

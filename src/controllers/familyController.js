@@ -1,5 +1,5 @@
 import asyncHandler from 'express-async-handler';
-import FamilyMember from '../models/FamilyMember.js';
+import FamilyMember from '../models/familyMember.js';
 import User from '../models/User.js';
 import { isValidPhone } from '../utils/validationUtils.js'; // Importing phone number validation utility
 

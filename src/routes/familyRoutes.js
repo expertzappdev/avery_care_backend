@@ -1,6 +1,6 @@
 import express from 'express';
-import { addFamilyMember, deleteFamilyMember, updateFamilyMember } from '../controllers/family.controller.js';
-import { protect } from '../midllewares/auth.middleware.js';
+import { addFamilyMember, deleteFamilyMember, updateFamilyMember } from '../controllers/familyController.js';
+import { protect } from '../midllewares/authMiddleware.js';
 
 const router = express.Router();
 

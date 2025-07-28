@@ -1,6 +1,6 @@
 import express from 'express';
-import authRoutes from './auth.routes.js'; // importing the auth routes
-import familyRoutes from './family.routes.js';
+import authRoutes from './authRoutes.js'; // importing the auth routes
+import familyRoutes from './familyRoutes.js';
 const router = express.Router();
 
 

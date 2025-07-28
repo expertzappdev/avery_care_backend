@@ -2,7 +2,7 @@ import express from 'express';
 import dotenv from 'dotenv';
 import cors from 'cors';
 import mainRoutes from './routes/index.js'; // combined routes
-import { notFound, errorHandler } from './midllewares/error.middleware.js'; // Error handling middlewares
+import { notFound, errorHandler } from './midllewares/errorMiddleware.js'; // Error handling middlewares
 
 dotenv.config();
 
