@@ -1,0 +1,18 @@
+# Node
+node_modules/
+
+.env
+
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# VSCode
+.vscode/
+
+# Frontend & Backend builds
+backend/dist/
