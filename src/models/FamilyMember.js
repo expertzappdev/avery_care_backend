@@ -1,34 +1,68 @@
+// models/familyMember.model.js
 import mongoose from 'mongoose';
 
 const familyMemberSchema = new mongoose.Schema(
-  {
-    name: {
-      type: String,
-      required: true,
-    },
-    phoneNumber: {
-      type: String,
-      required: true,
-    },
-    relationship: {
-      type: String,
-      required: true, // Example: "Mother", "Father", "Brother", "Sister", etc.
-    },
-    user: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'User', // Reference to the User model, indicating which user this family member belongs to
-      required: true,
-    },
-    isVerified: {
-      type: Boolean,
-      default: false, // Default value is false until explicitly verified
-    },
-  },
-  {
-    timestamps: true, // Automatically adds 'createdAt' and 'updatedAt' fields
-  }
+	{
+		isUser: {
+			type: Boolean,
+			default: false,
+		},
+		userId: {
+			type: mongoose.Schema.Types.ObjectId,
+			ref: 'User',
+			required: function () {
+				return this.isUser === true;
+			},
+		},
+		name: {
+			type: String,
+			trim: true,
+		},
+		email: {
+			type: String,
+			unique: true,
+			sparse: true, // allow null but enforce uniqueness if present
+			lowercase: true,
+			trim: true,
+		},
+		phoneNumber: {
+			type: String,
+			unique: true,
+			sparse: true, // allow null but enforce uniqueness if present
+			trim: true,
+		},
+		linkedToPrimaryUsers: [
+			{
+				type: mongoose.Schema.Types.ObjectId,
+				ref: 'User',
+			},
+		],
+	},
+	{ timestamps: true }
 );
 
+// Virtual to populate runtime info from User when isUser is true
+familyMemberSchema.virtual('userInfo', {
+	ref: 'User',
+	localField: 'userId',
+	foreignField: '_id',
+	justOne: true,
+});
+familyMemberSchema.set('toJSON', {
+	virtuals: true,
+	transform: function (doc, ret) {
+		// Merge userInfo fields into root if isUser is true and userInfo exists
+		if (ret.isUser && ret.userInfo) {
+			ret.name = ret.userInfo.name;
+			ret.email = ret.userInfo.email;
+			ret.phoneNumber = ret.userInfo.phoneNumber;
+			ret.createdAt = ret.userInfo.createdAt;
+			ret.updatedAt = ret.userInfo.updatedAt;
+		}
+		delete ret.userInfo; // remove nested userInfo object from final output
+		delete ret.__v;
+		return ret;
+	},
+});
 const FamilyMember = mongoose.model('FamilyMember', familyMemberSchema);
-
 export default FamilyMember;

@@ -1,7 +1,8 @@
 // Middleware for handling 404 (Not Found) errors
 const notFound = (req, res, next) => {
   // Create a new Error object with a "Not Found" message including the original URL
-  const error = new Error(`Not Found - ${req.originalUrl}`);
+  // const error = new Error(`Not Found - ${req.originalUrl}`);
+  const error = new Error(`Not Found - ${req.method} ${req.originalUrl}`);
   // Set the response status code to 404 (Not Found)
   res.status(404);
   // Pass the error to the next middleware in the chain (which will be the errorHandler)
@@ -18,10 +19,15 @@ const errorHandler = (err, req, res, next) => {
   // Set the response status code
   res.status(statusCode);
   // Send a JSON response with the error message
-  res.json({
-    message: err.message,
-    // Include the stack trace only in development mode for debugging.
-    // In production, keep it null for security reasons.
+  // res.json({
+  //   message: err.message,
+  //   // Include the stack trace only in development mode for debugging.
+  //   // In production, keep it null for security reasons.
+  //   stack: process.env.NODE_ENV === 'production' ? null : err.stack,
+  // });
+  res.status(statusCode).json({
+    success: false,
+    message: err.message || 'Internal Server Error',
     stack: process.env.NODE_ENV === 'production' ? null : err.stack,
   });
 };

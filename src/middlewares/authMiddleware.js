@@ -1,7 +1,6 @@
 import jwt from 'jsonwebtoken';
 import asyncHandler from 'express-async-handler';
-import User from '../models/User.js';
-
+import User from '../models/user.js';
 /**
  * @desc    Protect routes - Middleware to authenticate users using JWT
  * @param   {Object} req - Express request object
