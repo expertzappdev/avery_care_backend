@@ -34,10 +34,10 @@ const registerUser = asyncHandler(async (req, res) => {
   }
 
   // Phone number format validation (must be 10 digits and start with 6, 7, 8, or 9)
-  // if (!isValidPhone(phoneNumber)) {
-  //   res.status(400);
-  //   throw new Error('Invalid phone number. Must be 10 digits and start with 6, 7, 8, or 9.');
-  // }
+  if (!isValidPhone(phoneNumber)) {
+    res.status(400);
+    throw new Error('Invalid phone number, Must be an Indian number with country code (+91) and 10 digits starting with 6, 7, 8, or 9.');
+  }
 
   // --- User Uniqueness Checks (Email AND Phone Number) ---
   // Check if a user with this email already exists

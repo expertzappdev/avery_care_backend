@@ -23,10 +23,11 @@ const addFamilyMember = async (req, res) => {
 			return res.status(201).json({ message: 'Invalid email format for family member. Only @gmail.com emails are allowed.' });
 		}
 
-		// if (!isValidPhone(phoneNumber)) {
-		// 	return res.status(400).json({ message: 'Invalid phone number for family member. Must be 10 digits and start with 6, 7, 8, or 9.' });
-		// 	// throw new Error('Invalid email format for family member. Only @gmail.com emails are allowed.');
-		// }
+		if (!isValidPhone(phoneNumber)) {
+			res.status(400);
+			throw new Error('Invalid phone number, Must be an Indian number with country code (+91) and 10 digits starting with 6, 7, 8, or 9.');
+		}
+
 		const primaryUserId = req.user._id;
 		const primaryUser = await User.findById(primaryUserId);
 		const sanitizedRelation = relationship.trim().toLowerCase();
@@ -243,10 +244,10 @@ const updateFamilyMember = asyncHandler(async (req, res) => {
 	// --- End Logic ---
 
 	// Validate the format of the new phone number
-	// if (!isValidPhone(phoneNumber)) {
-	// 	res.status(400);
-	// 	throw new Error('Invalid phone number for family member. Must be 10 digits and start with 6, 7, 8, or 9.');
-	// }
+	if (!isValidPhone(phoneNumber)) {
+		res.status(400);
+		throw new Error('Invalid phone number, Must be an Indian number with country code (+91) and 10 digits starting with 6, 7, 8, or 9.');
+	}
 
 	// Validate the format of the new email
 	if (!isValidGmail(email)) {

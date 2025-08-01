@@ -4,9 +4,8 @@ const isValidGmail = (email) => {
     return regex.test(email);
 };
 
-// Check a phone number id of 10 digits and start with 6-9
 const isValidPhone = (phone) => {
-    const regex = /^[6-9]\d{9}$/;
+    const regex = /^\+91[6-9]\d{9}$/;
     return regex.test(phone);
 };
 
