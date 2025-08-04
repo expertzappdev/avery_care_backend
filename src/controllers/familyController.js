@@ -202,7 +202,16 @@ const updateFamilyMember = asyncHandler(async (req, res) => {
 	}
 	console.log("📝 Incoming update data after verify:", { name, phoneNumber, relationship, email });
 	// --- End Initial Input Validation ---
+	if (!isValidPhone(phoneNumber)) {
+		res.status(400);
+		throw new Error('Invalid phone number, Must be an Indian number with country code (+91) and 10 digits starting with 6, 7, 8, or 9.');
+	}
 
+	// Validate the format of the new email
+	if (!isValidGmail(email)) {
+		res.status(400);
+		throw new Error('Invalid email format for family member. Only @gmail.com emails are allowed.');
+	}
 	// --- Check existing relation with this name ---
 	const sanitizedRelation = relationship.trim().toLowerCase();
 	console.log("sanitizedRelation", sanitizedRelation)
@@ -244,16 +253,7 @@ const updateFamilyMember = asyncHandler(async (req, res) => {
 	// --- End Logic ---
 
 	// Validate the format of the new phone number
-	if (!isValidPhone(phoneNumber)) {
-		res.status(400);
-		throw new Error('Invalid phone number, Must be an Indian number with country code (+91) and 10 digits starting with 6, 7, 8, or 9.');
-	}
-
-	// Validate the format of the new email
-	if (!isValidGmail(email)) {
-		res.status(400);
-		throw new Error('Invalid email format for family member. Only @gmail.com emails are allowed.');
-	}
+	
 
 	// --- Uniqueness checks for updated email/phone ---
 	// If email is changing, check if the new email is already used by another global FamilyMember (excluding current FM)
