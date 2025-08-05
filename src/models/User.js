@@ -30,6 +30,22 @@ const userSchema = new mongoose.Schema(
 			enum: ['user', 'admin'], // Defines allowed roles for a user
 			default: 'user',        // Default role for new users is 'user'
 		},
+		isVerified: {
+			type: Boolean,
+			default: false,
+		},
+		otpExpiresAt: {
+			type: Date, // Important for TTL
+		},
+		emailOtp: {
+			type: String,
+			default: null,
+		},
+		mobileOtp: {
+			type: String,
+			default: null,
+		},
+
 		familyMembers: [
 			{
 				relation: {
@@ -53,7 +69,7 @@ const userSchema = new mongoose.Schema(
 );
 
 
-
+userSchema.index({ otpExpiresAt: 1 }, { expireAfterSeconds: 0 });
 // This pre-save hook hashes the password before saving the user document to the database.
 userSchema.pre('save', async function (next) {
 
@@ -67,14 +83,14 @@ userSchema.pre('save', async function (next) {
 });
 
 userSchema.pre('save', function (next) {
-  const relations = this.familyMembers.map(fm => fm.relation);
-  const uniqueRelations = new Set(relations);
+	const relations = this.familyMembers.map(fm => fm.relation);
+	const uniqueRelations = new Set(relations);
 
-  if (relations.length !== uniqueRelations.size) {
-    return next(new Error('Duplicate relation types are not allowed.'));
-  }
+	if (relations.length !== uniqueRelations.size) {
+		return next(new Error('Duplicate relation types are not allowed.'));
+	}
 
-  next();
+	next();
 });
 userSchema.methods.matchPassword = async function (enteredPassword) {
 	return await bcrypt.compare(enteredPassword, this.password);

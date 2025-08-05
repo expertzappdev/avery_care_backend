@@ -9,180 +9,199 @@ import { isValidPhone, isValidGmail } from '../utils/ValidationUtils.js';
 // @route   POST /api/family
 // @access  Private (Authenticated User only)
 // const addFamilyMember = asyncHandler(async (req, res) => {
-
 const addFamilyMember = async (req, res) => {
-
 	try {
-		const { name, email, phoneNumber, relationship } = req.body;
-		if (!name || !phoneNumber || !email || !relationship) {
-			console.log("❌ Missing required fields.");
+		const { name, email, phoneNumber, relation } = req.body;
+		const currentUserId = req.user._id;
+
+		if (!name || !email || !phoneNumber || !relation) {
 			res.status(400);
-			return res.status(400).json({ message: 'please enter all fields' });
-		}
-		if (!isValidGmail(email)) {
-			return res.status(201).json({ message: 'Invalid email format for family member. Only @gmail.com emails are allowed.' });
+			throw new Error('Please enter all fields: name, email, phone number, and relationship for update.');
 		}
 
 		if (!isValidPhone(phoneNumber)) {
-			res.status(400);
+			res.status(404);
 			throw new Error('Invalid phone number, Must be an Indian number with country code (+91) and 10 digits starting with 6, 7, 8, or 9.');
 		}
 
-		const primaryUserId = req.user._id;
-		const primaryUser = await User.findById(primaryUserId);
-		const sanitizedRelation = relationship.trim().toLowerCase();
+		// Validate the format of the new email
+		if (!isValidGmail(email)) {
+			res.status(404);
+			throw new Error('Invalid email format for family member. Only @gmail.com emails are allowed.');
+		}
+		const sanitizedRelation = relation.trim().toLowerCase();
+		console.log("sanitizedRelation", sanitizedRelation)
 		//-------------------checks exising user this same relationship ------------------------------------
+		const primaryUser = await User.findById(currentUserId);
 		const existingRelation = primaryUser.familyMembers.find(fm => fm.relation === sanitizedRelation);
+
 		if (existingRelation) {
-			return res.status(200).json({ message: `A family member with relation '${sanitizedRelation}' already exists.` });
+			// return res.status(200).json({ message: `A family member with relation '${sanitizedRelation}' already exists.` });
+			return res.status(409).json({
+				success: false,
+				message: `A family member with the relation '${sanitizedRelation}' already exists.`,
+			});
 		}
-		//-------------------checks Self Linking ------------------------------------
-		// const selfUser = await User.findById(primaryUserId)
-		if (primaryUser.email === email || primaryUser.phoneNumber === phoneNumber) {
-			return res.status(400).json({ message: 'self linking is not allowed' });
+
+		const [emailUser, phoneUser, emailFM, phoneFM] = await Promise.all([
+			User.findOne({ email }),
+			User.findOne({ phoneNumber }),
+			FamilyMember.findOne({ email }),
+			FamilyMember.findOne({ phoneNumber }),
+		]);
+
+		// Conflict: Same email and phone exist but in different documents (invalid pair)
+		if (
+			(emailUser && phoneUser && emailUser._id.toString() !== phoneUser._id.toString()) ||
+			(emailFM && phoneFM && emailFM._id.toString() !== phoneFM._id.toString())
+		) {
+			let conflictMessage = 'Conflict: Email and phone exist but not as a valid pair.';
+
+			if (emailUser && phoneUser && emailUser._id.toString() !== phoneUser._id.toString()) {
+				conflictMessage += ' Email matched with one user and phone with another user.';
+			} else if (emailUser && !phoneUser) {
+				conflictMessage += ' Email matched with a user, phone did not.';
+			} else if (!emailUser && phoneUser) {
+				conflictMessage += ' Phone matched with a user, email did not.';
+			}
+
+			if (emailFM && phoneFM && emailFM._id.toString() !== phoneFM._id.toString()) {
+				conflictMessage += ' Email matched with one family member and phone with another.';
+			} else if (emailFM && !phoneFM) {
+				conflictMessage += ' Email matched with a family member, phone did not.';
+			} else if (!emailFM && phoneFM) {
+				conflictMessage += ' Phone matched with a family member, email did not.';
+			}
+
+			if ((emailUser && phoneFM) || (phoneUser && emailFM)) {
+				conflictMessage += ' Email matched with a user and phone with a family member (or vice versa).';
+			}
+			return res.status(409).json({ success: false, message: conflictMessage });
 		}
 
-		//-------------------familly logic starts here ------------------------------------------------------------------------------
-		//my updated logic  ---------------------------------------------------------------------------------
-		const emailMatch = await FamilyMember.findOne({ email });
-		const phoneMatch = await FamilyMember.findOne({ phoneNumber });
+		let existingFM = null;
+		if (emailFM && phoneFM && emailFM._id.toString() === phoneFM._id.toString()) {
+			existingFM = emailFM;
+		}
+		else if ((emailFM && phoneFM && emailFM._id.toString() !== phoneFM._id.toString()) || (emailFM || phoneFM)) {
+			// Partial match or mismatched document
+			return res.status(409).json({
+				success: false,
+				message: 'Email and phone must belong to the same family member, or both should be new.',
+			});
+		}
 
-		if (emailMatch && phoneMatch) {
-			if (emailMatch._id.equals(phoneMatch._id)) {
-				// ✅ Both matched in the same entry
-				console.log("email and phone logic working fine and now db function linking")
-
-				//exisintg member linking logic pasted here ------------------------------------------------------>
-				if (emailMatch) {
-					// Check if this user already linked to this member
-					if (emailMatch.linkedToPrimaryUsers.includes(primaryUserId)) {
-						return res.status(400).json({ message: 'Family member already linked to this user.' });
-					}
-					console.log("fm found with this email");
-
-					emailMatch.linkedToPrimaryUsers.push(primaryUserId);
-					await emailMatch.save();
-
-					await User.findByIdAndUpdate(primaryUserId, {
-						$addToSet: {
-							familyMembers: {
-								relation: sanitizedRelation,
-								member: emailMatch._id
-							}
-						}
-					});
-
-					return res.status(200).json({ message: 'Existing family member linked successfully.', member: emailMatch });
-				}
-
-
-				//exisintg member linking logic pasted here ------------------------------------------------------>
-
-			} else {
-				// ⚠️ Email and phone matched with different entries
-				return res.status(400).json({
-					status: 'conflict',
-					message: 'Email and phone match with different family members.',
-					emailMatchedMember: emailMatch,
-					phoneMatchedMember: phoneMatch,
+		if (existingFM) {
+			if (emailUser && emailUser.email === email && emailUser.phoneNumber === phoneNumber) {
+				existingFM.isUser = true
+				existingFM.userId = currentUserId
+				existingFM.name = emailUser.name
+				existingFM.email = emailUser.email
+				existingFM.phoneNumber = emailUser.phoneNumber
+				await existingFM.save();
+			}
+			// If this FM already linked to the user, don't re-link
+			if (existingFM.linkedToPrimaryUsers.includes(currentUserId)) {
+				return res.status(200).json({
+					success: true,
+					message: 'Family member already linked to this user',
+					familyMember: existingFM,
 				});
 			}
-		} else if (emailMatch) {
-			// ✅ Only email matched
-			return res.status(200).json({
-				status: 'email_match_only',
-				message: 'Email matches an existing family member, phone does not.',
-				member: emailMatch,
+			// Link to current user
+			existingFM.linkedToPrimaryUsers.push(currentUserId);
+			await existingFM.save();
+
+			await User.findByIdAndUpdate(currentUserId, {
+				$push: {
+					familyMembers: {
+						relation,
+						member: existingFM._id,
+					},
+				},
 			});
-		} else if (phoneMatch) {
-			// ✅ Only phone matched
+
 			return res.status(200).json({
-				status: 'phone_match_only',
-				message: 'Phone matches an existing family member, email does not.',
-				member: phoneMatch,
+				success: true,
+				message: 'Family member linked to your account.',
+				familyMember: existingFM,
 			});
 		}
-		//my updated logic  ---------------------------------------------------------------------------------
-		// Check if a FamilyMember already exists with same email and phone
 
-		console.log("not found in existing fm entries ");
 		// Create new family member
-		const newFamilyMember = await FamilyMember.create({
+		const newFM = await FamilyMember.create({
 			name,
 			email,
 			phoneNumber,
-			isUser: false,
-			linkedToPrimaryUsers: [primaryUserId],
+			linkedToPrimaryUsers: [currentUserId],
 		});
-		console.log("entry created");
-		// Add this member to User's familyMembers list
-		await User.findByIdAndUpdate(primaryUserId, {
-			$addToSet: {
+		if (emailUser && emailUser.email === email && emailUser.phoneNumber === phoneNumber) {
+			newFM.isUser = true
+			newFM.userId = currentUserId
+			newFM.name = emailUser.name
+			newFM.email = emailUser.email
+			newFM.phoneNumber = emailUser.phoneNumber
+			await newFM.save();
+		}
+
+		await User.findByIdAndUpdate(currentUserId, {
+			$push: {
 				familyMembers: {
-					relation: sanitizedRelation,
-					member: newFamilyMember._id
-				}
-			}
+					relation,
+					member: newFM._id,
+				},
+			},
 		});
 
-		const dummyMember = await User.findById(primaryUserId);
-		console.log("this family member is added in : ", dummyMember.name);
-		// return res.status(201).json({ message: 'Family member added successfully.', member: newFamilyMember });
-
-		//-------------------familly logic ends here ------------------------------------------------------------------------------
-
-
-
-		//-------------------User verificaation here ------------------------------------------------------------------------>
-		const emailMatchWithUser = await User.findOne({ email });
-		const phoneMatchWithUser = await User.findOne({ phoneNumber });
-
-		if (emailMatchWithUser && phoneMatchWithUser) {
-			if (emailMatchWithUser._id.equals(phoneMatchWithUser._id)) {
-				// ✅ Both matched in the same entry
-				console.log("email and phone logic working fine founded : ", emailMatchWithUser)
-
-				newFamilyMember.isUser = true
-				newFamilyMember.userId = emailMatchWithUser
-				await newFamilyMember.save();
-
-				console.log("set to true and id set also: ", newFamilyMember.isUser, newFamilyMember.userId);
-
-			} else {
-				// ⚠️ Email and phone matched with different entries
-				return res.status(400).json({
-					status: 'conflict',
-					message: 'Email and phone match with different Users.',
-					emailMatchedMember: emailMatchWithUser,
-					phoneMatchedMember: phoneMatchWithUser,
-				});
-			}
-		} else if (emailMatchWithUser) {
-			// ✅ Only email matched
-			return res.status(200).json({
-				status: 'email_match_only',
-				message: 'Email matches an existing User, phone does not.',
-				member: emailMatchWithUser,
-			});
-		} else if (phoneMatchWithUser) {
-			// ✅ Only phone matched
-			return res.status(200).json({
-				status: 'phone_match_only',
-				message: 'Phone matches an existing User, email does not.',
-				member: phoneMatchWithUser,
-			});
-		}
-		//-------------------User Logic ends here------------------------------------------------------------------------>
-		if (emailMatchWithUser) {
-			return res.status(201).json({ message: 'Family member added successfully and is already a User', member: newFamilyMember });
-		}
-		return res.status(201).json({ message: 'Family member added successfully', member: newFamilyMember });
+		return res.status(201).json({
+			success: true,
+			message: 'Family member created and linked.',
+			familyMember: newFM,
+		});
 	} catch (error) {
 		console.error('Add Family Member Error:', error);
-		return res.status(500).json({ message: 'Server error while adding family member.' });
+		return res.status(500).json({ success: false, message: 'Server Error' });
 	}
 };
 
+//get family members
+const getFamilyMembers = async (req, res) => {
+	try {
+		const userId = req.user._id; // token se mila hua user ID (auth middleware se)
+
+		const user = await User.findById(userId)
+			.populate({
+				path: 'familyMembers.member',
+				select: 'name email phoneNumber', // sirf ye fields chahiye
+			})
+			.select('familyMembers');
+
+		if (!user) {
+			return res.status(404).json({ message: 'User not found' });
+		}
+		if (!user.familyMembers || user.familyMembers.length === 0) {
+			return res.status(200).json({ message: 'No family members linked' });
+		}
+		const formattedFamily = {};
+
+		for (let fm of user.familyMembers) {
+			const relation = fm.relation;
+			const member = fm.member;
+			if (member) {
+				formattedFamily[relation] = {
+					name: member.name,
+					email: member.email,
+					phoneNumber: member.phoneNumber,
+				};
+			}
+		}
+
+		res.status(200).json(formattedFamily);
+	} catch (error) {
+		console.error(error);
+		res.status(500).json({ message: 'Server error' });
+	}
+};
 
 const updateFamilyMember = asyncHandler(async (req, res) => {
 
@@ -359,4 +378,4 @@ const deleteFamilyMember = asyncHandler(async (req, res) => {
 	res.json({ message: 'Family member removed from your list successfully.' });
 });
 
-export { addFamilyMember, updateFamilyMember, deleteFamilyMember };
+export { addFamilyMember, getFamilyMembers, updateFamilyMember, deleteFamilyMember };
