@@ -3,29 +3,18 @@ import generateToken from '../utils/jwt.js';
 import asyncHandler from 'express-async-handler';
 import { isValidGmail, isValidPhone } from '../utils/ValidationUtils.js';
 import FamilyMember from '../models/FamilyMember.js';
+import generateOTP from '../utils/otp.js';
+import { isValidOtp } from '../utils/ValidationUtils.js';
+import { sendEmail } from '../config/emailConfig.js';
+import { sendOtpSms } from '../config/smsConfig.js';
 
-// @desc    Register a new user
-// @route   POST /api/auth/register
-// @access  Public
 const registerUser = asyncHandler(async (req, res) => {
   const { name, email, phoneNumber, password, role } = req.body;
 
-  // --- Initial Input Validation for all required fields ---
-  if (!name) {
+  // --- Step 1: Basic Validations ---
+  if (!name || !email || !phoneNumber || !password) {
     res.status(400);
-    throw new Error('Name is required.');
-  }
-  if (!email) {
-    res.status(400);
-    throw new Error('Email is required.');
-  }
-  if (!phoneNumber) {
-    res.status(400);
-    throw new Error('Phone number is required.');
-  }
-  if (!password) {
-    res.status(400);
-    throw new Error('Password is required.');
+    throw new Error('Name, Email, Phone Number, and Password are required.');
   }
 
   if (!isValidGmail(email)) {
@@ -33,128 +22,225 @@ const registerUser = asyncHandler(async (req, res) => {
     throw new Error('Invalid email format. Only @gmail.com emails are allowed.');
   }
 
-  // Phone number format validation (must be 10 digits and start with 6, 7, 8, or 9)
   if (!isValidPhone(phoneNumber)) {
     res.status(400);
-    throw new Error('Invalid phone number, Must be an Indian number with country code (+91) and 10 digits starting with 6, 7, 8, or 9.');
+    throw new Error('Invalid phone number. Must be Indian (+91) and start with 6, 7, 8, or 9.');
   }
 
-  // --- User Uniqueness Checks (Email AND Phone Number) ---
-  // Check if a user with this email already exists
+  // --- Step 2: Uniqueness Checks ---
   const userExistsByEmail = await User.findOne({ email });
   if (userExistsByEmail) {
     res.status(400);
     throw new Error('User already exists with this email.');
   }
 
-  // Check if a user with this phone number already exists
   const userExistsByPhone = await User.findOne({ phoneNumber });
   if (userExistsByPhone) {
     res.status(400);
     throw new Error('Phone number is already used by another user.');
   }
-  // --- End User Uniqueness Checks ---
 
-
-  // --- Logic for FamilyMember Matching and Linking during Registration (Point 4 from your logic) ---
+  // --- Step 3: FamilyMember Matching ---
   let linkedFamilyMemberEntry = null;
 
-  // Find family member entries that match by email OR phone, and are not yet linked to a User
   const matchingUnlinkedFamilyMembers = await FamilyMember.find({
     $or: [{ email: email }, { phoneNumber: phoneNumber }],
-    isUser: false, // Only consider those not yet marked as a User
-    userId: null   // Ensure they are truly unlinked
+    isUser: false,
+    userId: null
   });
 
   if (matchingUnlinkedFamilyMembers.length > 0) {
-    // Filter for an exact match (both email AND phone number) with an unlinked family member
-    const exactMatchCandidate = matchingUnlinkedFamilyMembers.find(fm =>
+    const exactMatch = matchingUnlinkedFamilyMembers.find(fm =>
       fm.email === email && fm.phoneNumber === phoneNumber
     );
 
-    if (exactMatchCandidate) {
-      linkedFamilyMemberEntry = exactMatchCandidate;
+    if (exactMatch) {
+      linkedFamilyMemberEntry = exactMatch;
     } else {
-      // Scenario: Email matches but Phone doesn't, OR Phone matches but Email doesn't
-      // This enforces the "pair must match" rule for family members who are trying to register
       if (matchingUnlinkedFamilyMembers.some(fm => fm.email === email && fm.phoneNumber !== phoneNumber)) {
         res.status(400);
-        throw new Error('This email is associated with a family member, but the phone number does not match their record. Please register with the correct phone number and email.');
+        throw new Error('This email is linked to a family member, but the phone number does not match.');
       }
       if (matchingUnlinkedFamilyMembers.some(fm => fm.phoneNumber === phoneNumber && fm.email !== email)) {
         res.status(400);
-        throw new Error('This phone number is associated with a family member, but the email does not match their record. Please register with the correct email and phone Number.');
+        throw new Error('This phone number is linked to a family member, but the email does not match.');
       }
     }
   }
-  // --- End FamilyMember Matching and Linking Logic ---
 
+  // --- Step 4: Generate OTP ---
+  const emailOtp = generateOTP();
+  const mobileOtp = generateOTP();
+  const otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000); // expires in 10 minutes
 
-  // Create new User
+  // Send OTP via email
+  await sendEmail(email, emailOtp);
+  await sendOtpSms(phoneNumber, mobileOtp);
+
+  // --- Step 5: Create User ---
   const user = await User.create({
     name,
     email,
     phoneNumber,
-    password, // Password will be automatically hashed by the UserSchema's pre-save hook
+    password, // password hashing via schema
     role,
+    emailOtp,
+    mobileOtp,
+    otpExpiresAt,
+    isVerified: false,  // default false until verified via OTP
   });
 
-  if (user) {
-    // If a matching FamilyMember entry was found, update it to reflect the new User (Point 4)
-    if (linkedFamilyMemberEntry) {
-      linkedFamilyMemberEntry.isUser = true;         // Mark as a registered user
-      linkedFamilyMemberEntry.userId = user._id;      // Link to the newly created User ID
-      linkedFamilyMemberEntry.name = user.name;       // Sync name from User
-      linkedFamilyMemberEntry.email = user.email;     // Sync email from User
-      linkedFamilyMemberEntry.phoneNumber = user.phoneNumber; // Sync phone from User
-      await linkedFamilyMemberEntry.save(); // Save the updated FamilyMember entry
-    }
-
-    res.status(201).json({
-      _id: user._id,
-      name: user.name,
-      email: user.email,
-      phoneNumber: user.phoneNumber,
-      role: user.role,
-      token: generateToken(user._id),
-      message: linkedFamilyMemberEntry ? 'User registered and also present as family member of !' : 'User registered successfully!'
-    });
-  } else {
-    res.status(400);
-    throw new Error('Invalid user data');
+  // --- Step 6: Link to FamilyMember (if applicable) ---
+  if (linkedFamilyMemberEntry) {
+    linkedFamilyMemberEntry.isUser = true;
+    linkedFamilyMemberEntry.userId = user._id;
+    linkedFamilyMemberEntry.name = user.name;
+    linkedFamilyMemberEntry.email = user.email;
+    linkedFamilyMemberEntry.phoneNumber = user.phoneNumber;
+    await linkedFamilyMemberEntry.save();
   }
+
+  // --- Step 7: Respond ---
+  res.status(201).json({
+    success: true,
+    _id: user._id,
+    name: user.name,
+    email: user.email,
+    phoneNumber: user.phoneNumber,
+    role: user.role,
+    message: linkedFamilyMemberEntry
+      ? 'Family Member registered as User OTP sent to email for Verification.'
+      : 'User registered successfully, Verification Required OTP sent to email.',
+  });
 });
 
-// @desc    Authenticate user & get token
-// @route   POST /api/auth/login
-// @access  Public
+
+const verifyOtp = asyncHandler(async (req, res) => {
+  const { email, emailOtp, mobileOtp } = req.body;
+  console.log("api hit")
+
+  if (!email || !emailOtp || !mobileOtp) {
+    res.status(400);
+    throw new Error('Email, mobileOtp and emailOtp are required.');
+  }
+  console.log(email, emailOtp, mobileOtp);
+
+  if (!isValidOtp(mobileOtp)) {
+    res.status(400);
+    throw new Error('! Invalid mobile OTP, must be of four digits');
+  }
+  console.log("mobile passed")
+  if (!isValidOtp(emailOtp)) {
+    res.status(400);
+    throw new Error('! Invalid email OTP, must be of four digits');
+  }
+  console.log("email passed")
+  const user = await User.findOne({ email });
+  // console.log(user.otp, user.otpExpiresAt)
+
+  if (!user) {
+    res.status(404);
+    throw new Error('User not found.');
+  }
+
+  if (!user.emailOtp || !user.otpExpiresAt || !user.mobileOtp) {
+    res.status(400);
+    throw new Error('No OTP found. Please request a new one.');
+  }
+
+  if (user.isVerified) {
+    res.status(400);
+    throw new Error('User is already verified.');
+  }
+
+  if (user.emailOtp !== emailOtp && user.mobileOtp !== mobileOtp) {
+    res.status(400);
+    throw new Error('Invalid OTP.');
+  }
+
+  if (user.otpExpiresAt < new Date()) {
+    res.status(400);
+    throw new Error('OTP has expired.');
+  }
+
+  // OTP matched & valid
+  user.isVerified = true;
+  user.emailOtp = null;
+  user.mobileOtp = null;
+  user.otpExpiresAt = null;
+
+  await user.save();
+
+  res.status(200).json({
+    success: true,
+    message: 'OTP verified successfully. User Registered and Verified Successfully',
+    token: generateToken(user._id), // send token after successful verification
+  });
+});
+
+
 const loginUser = asyncHandler(async (req, res) => {
   const { email, password } = req.body;
 
-  // Basic validation for login fields: ensure email and password are provided
+  console.log("req recieved", email, password);
   if (!email || !password) {
     res.status(400);
     throw new Error('Please enter both email and password.');
   }
-
-  // Find the user by email
-  const user = await User.findOne({ email });
-
-  // If user exists and password matches, return user details and a new JWT token
-  if (user && (await user.matchPassword(password))) {
-    res.json({
-      _id: user._id,
-      name: user.name,
-      email: user.email,
-      phoneNumber: user.phoneNumber,
-      role: user.role,
-      token: generateToken(user._id),
+  const user = await User.findOne({ email })
+    .populate({
+      path: 'familyMembers.member',
+      populate: { path: 'userInfo' }, // virtual populate if isUser: true
+      select: 'name email phoneNumber isUser userId',
     });
-  } else {
-    // If user not found or password doesn't match
+
+  if (!user) {
     res.status(401);
-    throw new Error('Invalid email or password');
+    throw new Error('Invalid email');
   }
+
+  if (!user.isVerified) {
+    res.status(401);
+    throw new Error('Account not verified');
+  }
+
+  const passwordMatches = await user.matchPassword(password);
+
+  if (!passwordMatches) {
+    res.status(401);
+    throw new Error('Invalid password.');
+  }
+
+  // Format familyMembers
+  let formattedFamily = {};
+
+  for (let fm of user.familyMembers) {
+    const member = fm.member;
+    if (member) {
+      formattedFamily[fm.relation] = {
+        name: member.name,
+        email: member.email,
+        phoneNumber: member.phoneNumber,
+      };
+    }
+  }
+
+  res.status(200).json({
+    success: true,
+    message: "User logged in successfully",
+    data: {
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        phoneNumber: user.phoneNumber,
+        role: user.role,
+      },
+      token: generateToken(user._id),
+      familyMembers: Object.keys(formattedFamily).length > 0 ? formattedFamily : null
+    }
+  });
 });
 
-export { registerUser, loginUser };
+
+export { registerUser, verifyOtp, loginUser };

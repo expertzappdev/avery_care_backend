@@ -5,8 +5,14 @@ const isValidGmail = (email) => {
 };
 
 const isValidPhone = (phone) => {
-    const regex = /^\+91[6-9]\d{9}$/;
+    const regex = /^[6-9]\d{9}$/;
     return regex.test(phone);
 };
 
-export { isValidGmail, isValidPhone };
+const isValidOtp = (otp) => {
+    const regex = /^\d{4}$/;
+    return regex.test(otp);
+};
+
+
+export { isValidGmail, isValidPhone, isValidOtp };
