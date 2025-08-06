@@ -11,29 +11,35 @@ import { isValidPhone, isValidGmail } from '../utils/ValidationUtils.js';
 // const addFamilyMember = asyncHandler(async (req, res) => {
 const addFamilyMember = async (req, res) => {
 	try {
-		const { name, email, phoneNumber, relation } = req.body;
+		const { name, email, phoneNumber, relationship } = req.body;
 		const currentUserId = req.user._id;
 
-		if (!name || !email || !phoneNumber || !relation) {
-			res.status(400);
-			throw new Error('Please enter all fields: name, email, phone number, and relationship for update.');
+		if (!name || !email || !phoneNumber || !relationship) {
+			return res.status(409).json({
+				success: false,
+				message: 'Please enter all fields: name, email, phone number, and relationship for update.'
+			});
 		}
 
 		if (!isValidPhone(phoneNumber)) {
-			res.status(404);
-			throw new Error('Invalid phone number, Must be an Indian number with country code (+91) and 10 digits starting with 6, 7, 8, or 9.');
+			return res.status(409).json({
+				success: false,
+				message: 'Invalid phone number, Must be an Indian number with country code (+91) and 10 digits starting with 6, 7, 8, or 9.'
+			});
 		}
 
 		// Validate the format of the new email
 		if (!isValidGmail(email)) {
-			res.status(404);
-			throw new Error('Invalid email format for family member. Only @gmail.com emails are allowed.');
+			return res.status(409).json({
+				success: false,
+				message: 'Invalid email format for family member. Only @gmail.com emails are allowed.'
+			});
 		}
-		const sanitizedRelation = relation.trim().toLowerCase();
+		const sanitizedRelation = relationship.trim().toLowerCase();
 		console.log("sanitizedRelation", sanitizedRelation)
 		//-------------------checks exising user this same relationship ------------------------------------
 		const primaryUser = await User.findById(currentUserId);
-		const existingRelation = primaryUser.familyMembers.find(fm => fm.relation === sanitizedRelation);
+		const existingRelation = primaryUser.familyMembers.find(fm => fm.relationship === sanitizedRelation);
 
 		if (existingRelation) {
 			// return res.status(200).json({ message: `A family member with relation '${sanitizedRelation}' already exists.` });
@@ -102,7 +108,7 @@ const addFamilyMember = async (req, res) => {
 			}
 			// If this FM already linked to the user, don't re-link
 			if (existingFM.linkedToPrimaryUsers.includes(currentUserId)) {
-				return res.status(200).json({
+				return res.status(409).json({
 					success: true,
 					message: 'Family member already linked to this user',
 					familyMember: existingFM,
@@ -115,16 +121,26 @@ const addFamilyMember = async (req, res) => {
 			await User.findByIdAndUpdate(currentUserId, {
 				$push: {
 					familyMembers: {
-						relation,
+						relationship,
 						member: existingFM._id,
 					},
 				},
 			});
 
-			return res.status(200).json({
-				success: true,
+			//  res.status(201).json({
+			// 	success: true,
+			// 	message: 'Family member linked to your account.',
+			// 	familyMember: existingFM,
+			// });
+			return res.status(201).json({
 				message: 'Family member linked to your account.',
-				familyMember: existingFM,
+				_id: existingFM._id, // Send the ID for frontend's key
+				name: existingFM.name,
+				relationship: sanitizedRelation, // This comes from the primary user's perspective
+				email: existingFM.email,
+				phone: existingFM.phoneNumber, // Use 'phone' for frontend consistency
+				isUser: existingFM.isUser,
+				userId: existingFM.userId || null
 			});
 		}
 
@@ -147,17 +163,28 @@ const addFamilyMember = async (req, res) => {
 		await User.findByIdAndUpdate(currentUserId, {
 			$push: {
 				familyMembers: {
-					relation,
+					relationship,
 					member: newFM._id,
 				},
 			},
 		});
 
-		return res.status(201).json({
-			success: true,
-			message: 'Family member created and linked.',
-			familyMember: newFM,
+		// return res.status(201).json({
+		// success: true,
+		// message: 'Family member .',
+		// familyMember: newFM,
+		// });
+		res.status(201).json({
+			message: 'Family member processed successfully.',
+			_id: newFM._id, // Send the ID for frontend's key
+			name: newFM.name,
+			relationship: sanitizedRelation, // This comes from the primary user's perspective
+			email: newFM.email,
+			phone: newFM.phoneNumber, // Use 'phone' for frontend consistency
+			isUser: newFM.isUser,
+			userId: newFM.userId || null
 		});
+
 	} catch (error) {
 		console.error('Add Family Member Error:', error);
 		return res.status(500).json({ success: false, message: 'Server Error' });
@@ -180,29 +207,33 @@ const getFamilyMembers = async (req, res) => {
 			return res.status(404).json({ message: 'User not found' });
 		}
 		if (!user.familyMembers || user.familyMembers.length === 0) {
-			return res.status(200).json({ message: 'No family members linked' });
+			return res.status(404).json({ message: 'No family members linked' });
 		}
-		const formattedFamily = {};
-
-		for (let fm of user.familyMembers) {
-			const relation = fm.relation;
-			const member = fm.member;
-			if (member) {
-				formattedFamily[relation] = {
-					name: member.name,
-					email: member.email,
-					phoneNumber: member.phoneNumber,
-				};
+		const formattedFamily = [];
+		if (user.familyMembers && user.familyMembers.length > 0) {
+			for (let fm of user.familyMembers) {
+				const member = fm.member; // This is the populated FamilyMember document
+				// Only push if the member was successfully populated and exists
+				if (member) {
+					formattedFamily.push({
+						_id: member._id, // Important for frontend keys and delete operations
+						name: member.name,
+						relationship: fm.relation, // This is the relationship for *this* user
+						email: member.email,
+						phone: member.phoneNumber, // Using 'phone' for consistency with frontend
+						isUser: member.isUser,
+						userId: member.userId // If it's a registered user, this will be their user ID
+					});
+				}
 			}
-		}
 
-		res.status(200).json(formattedFamily);
+			res.status(200).json(formattedFamily);
+		}
 	} catch (error) {
 		console.error(error);
 		res.status(500).json({ message: 'Server error' });
 	}
-};
-
+}
 const updateFamilyMember = asyncHandler(async (req, res) => {
 
 	const { familyMemberId } = req.params;

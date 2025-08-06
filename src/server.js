@@ -1,7 +1,7 @@
 import app from './app.js'; // import the express app
 import connectDB from './config/db.js'; // import the db connection utility
 
-dotenv.config();
+// dotenv.config();
 
 // Connect to Database
 connectDB();
