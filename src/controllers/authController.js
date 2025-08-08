@@ -123,6 +123,7 @@ const verifyOtp = asyncHandler(async (req, res) => {
     res.status(400);
     throw new Error('Email, mobileOtp and emailOtp are required.');
   }
+  
   console.log(email, emailOtp, mobileOtp);
 
   if (!isValidOtp(mobileOtp)) {
@@ -225,20 +226,14 @@ const loginUser = asyncHandler(async (req, res) => {
     }
   }
 
-  res.status(200).json({
+  res.json({
     success: true,
-    message: "User logged in successfully",
-    data: {
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        phoneNumber: user.phoneNumber,
-        role: user.role,
-      },
-      token: generateToken(user._id),
-      familyMembers: Object.keys(formattedFamily).length > 0 ? formattedFamily : null
-    }
+    _id: user._id,
+    name: user.name,
+    email: user.email,
+    phoneNumber: user.phoneNumber,
+    role: user.role,
+    token: generateToken(user._id),
   });
 });
 

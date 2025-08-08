@@ -48,7 +48,7 @@ const userSchema = new mongoose.Schema(
 
 		familyMembers: [
 			{
-				relation: {
+				relationship: {
 					type: String,
 					required: true,
 					trim: true,

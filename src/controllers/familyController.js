@@ -218,7 +218,7 @@ const getFamilyMembers = async (req, res) => {
 					formattedFamily.push({
 						_id: member._id, // Important for frontend keys and delete operations
 						name: member.name,
-						relationship: fm.relation, // This is the relationship for *this* user
+						relationship: fm.relationship, // This is the relationship for *this* user
 						email: member.email,
 						phone: member.phoneNumber, // Using 'phone' for consistency with frontend
 						isUser: member.isUser,
@@ -234,6 +234,8 @@ const getFamilyMembers = async (req, res) => {
 		res.status(500).json({ message: 'Server error' });
 	}
 }
+
+
 const updateFamilyMember = asyncHandler(async (req, res) => {
 
 	const { familyMemberId } = req.params;
@@ -340,6 +342,17 @@ const updateFamilyMember = asyncHandler(async (req, res) => {
 	familyMember.name = name;
 	familyMember.email = email;
 	familyMember.phoneNumber = phoneNumber;
+	await User.updateOne(
+		{
+			_id: primaryUserId,
+			'familyMembers.member': familyMember._id, // Match the exact member
+		},
+		{
+			$set: {
+				'familyMembers.$.relationship': sanitizedRelation, // Update only that relationship
+			},
+		}
+	);
 	// Save the updated FamilyMember document
 	const updatedFamilyMember = await familyMember.save();
 	// console.log("✅ FamilyMember successfully updated:", updatedFamilyMember);
