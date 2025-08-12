@@ -33,6 +33,10 @@ const scheduledCallSchema = new mongoose.Schema({
     type: Date,
     required: true,
   },
+  scheduledAtHistory: { // Naya field
+        type: [Date],
+        default: [],
+  },
   startTime: {
     type: Date,
     default: null,
@@ -47,7 +51,7 @@ const scheduledCallSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['pending', 'in-progress', 'completed', 'not-picked-up', 'failed'],
+    enum: ['pending', 'in-progress','failed','completed', ],
     default: 'pending',
   },
   triesLeft: {

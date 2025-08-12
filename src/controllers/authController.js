@@ -1,10 +1,10 @@
 import User from '../models/user.js';
 import generateToken from '../utils/jwt.js';
 import asyncHandler from 'express-async-handler';
-import { isValidGmail, isValidPhone } from '../utils/ValidationUtils.js';
-import FamilyMember from '../models/FamilyMember.js';
+// import FamilyMember from '../models/FamilyMember.js';
+import FamilyMember from '../models/familyMember.js';
 import generateOTP from '../utils/otp.js';
-import { isValidOtp } from '../utils/ValidationUtils.js';
+import { isValidOtp, isValidGmail, isValidPhone } from '../utils/validationUtils.js';
 import { sendEmail } from '../config/emailConfig.js';
 import { sendOtpSms } from '../config/smsConfig.js';
 
@@ -73,8 +73,24 @@ const registerUser = asyncHandler(async (req, res) => {
   const mobileOtp = generateOTP();
   const otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000); // expires in 10 minutes
 
-  // Send OTP via email
-  await sendEmail(email, emailOtp);
+  const subject = "OTP Verification";
+  const htmlContent = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+      <h2 style="color: #2d3748;">Password Recovery</h2>
+      <p>Your One Time Password for E-Cart Account:</p>
+      <div style="background: #f7fafc; padding: 16px; border-radius: 4px; 
+                  font-size: 24px; font-weight: bold; text-align: center; 
+                  margin: 16px 0; color: #2b6cb0;">
+        ${emailOtp}
+      </div>
+      <p><strong>Do not share this code with anyone.</strong></p>
+      <p style="color: #718096; font-size: 14px;">
+        If you didn't request this, please ignore this email.
+      </p>
+    </div>
+  `;
+
+  await sendEmail(email, subject, "Your One Time Password is ", htmlContent);
   await sendOtpSms(phoneNumber, mobileOtp);
 
   // --- Step 5: Create User ---
@@ -87,7 +103,7 @@ const registerUser = asyncHandler(async (req, res) => {
     emailOtp,
     mobileOtp,
     otpExpiresAt,
-    isVerified: false,  // default false until verified via OTP
+    isVerified: false,  // default false until verified via  OTP
   });
 
   // --- Step 6: Link to FamilyMember (if applicable) ---
@@ -123,7 +139,7 @@ const verifyOtp = asyncHandler(async (req, res) => {
     res.status(400);
     throw new Error('Email, mobileOtp and emailOtp are required.');
   }
-  
+
   console.log(email, emailOtp, mobileOtp);
 
   if (!isValidOtp(mobileOtp)) {
