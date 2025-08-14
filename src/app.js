@@ -1,17 +1,15 @@
 import express from 'express';
 import dotenv from 'dotenv';
 import cors from 'cors';
-import mainRoutes from './routes/index.js'; // combined routes
-// import { notFound, errorHandler } from './midllewares/errorMiddleware.js'; // Error handling middlewares
-// import { notFound, errorHandler } from './middlewares/errorMiddleware.js';
+import mainRoutes from './routes/index.js';
 import { notFound, errorHandler } from './middlewares/errorMiddleware.js';
 dotenv.config();
 
 const app = express();
 
 // --- Middlewares ---
-app.use(express.json()); // Body-parser middleware, parses the json body
-app.use(express.urlencoded({ extended: true })); // url to parses encoded data
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 app.use(cors()); // enable Cors for all origins 
 
 
@@ -19,9 +17,9 @@ app.use(cors()); // enable Cors for all origins
 // all API routes will be handled by '/api' prefix 
 app.use('/api', mainRoutes);
 
+app.use(notFound);
 // --- Error Handling Middlewares ---
 // if no route matches then this middleware will handle
-app.use(notFound);
 
 // Global error handler
 app.use(errorHandler);

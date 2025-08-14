@@ -3,7 +3,7 @@ import {
     addFamilyMember,
     getFamilyMembers,
     updateFamilyMember,
-    deleteFamilyMember
+    deleteFamilyMember,
 } from '../controllers/familyController.js';
 
 import { protect } from '../middlewares/authMiddleware.js';

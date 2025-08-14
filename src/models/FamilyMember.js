@@ -1,4 +1,3 @@
-// models/familyMember.model.js
 import mongoose from 'mongoose';
 
 const familyMemberSchema = new mongoose.Schema(

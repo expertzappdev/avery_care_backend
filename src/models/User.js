@@ -1,25 +1,25 @@
 import mongoose from 'mongoose';
-import bcrypt from 'bcryptjs'; // Password hashing ke liye import kiya gaya
+import bcrypt from 'bcryptjs';
 
 const userSchema = new mongoose.Schema(
 	{
 		name: {
 			type: String,
 			required: true,
-			trim: true, // Trim whitespace from the beginning/end of the string
+			trim: true,
 		},
 		email: {
 			type: String,
 			required: true,
-			unique: true,   // Ensures email addresses are unique across all users
-			lowercase: true, // Converts email to lowercase before saving
-			trim: true,     // Trim whitespace
+			unique: true,
+			lowercase: true,
+			trim: true,
 		},
 		phoneNumber: {
 			type: String,
 			required: true,
-			unique: true,   // Ensures phone numbers are unique across all users
-			trim: true,     // Trim whitespace
+			unique: true,
+			trim: true,
 		},
 		password: {
 			type: String,
@@ -27,15 +27,15 @@ const userSchema = new mongoose.Schema(
 		},
 		role: {
 			type: String,
-			enum: ['user', 'admin'], // Defines allowed roles for a user
-			default: 'user',        // Default role for new users is 'user'
+			enum: ['user', 'admin'],
+			default: 'user',
 		},
 		isVerified: {
 			type: Boolean,
 			default: false,
 		},
 		otpExpiresAt: {
-			type: Date, // Important for TTL
+			type: Date,
 		},
 		emailOtp: {
 			type: String,
@@ -48,7 +48,7 @@ const userSchema = new mongoose.Schema(
 
 		familyMembers: [
 			{
-				relation: {
+				relationship: {
 					type: String,
 					required: true,
 					trim: true,
@@ -64,7 +64,7 @@ const userSchema = new mongoose.Schema(
 
 	},
 	{
-		timestamps: true, // Automatically adds 'createdAt' and 'updatedAt' fields
+		timestamps: true,
 	}
 );
 

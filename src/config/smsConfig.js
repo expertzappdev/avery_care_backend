@@ -6,7 +6,7 @@ const apiKey = process.env.TWO_FACTOR_API_KEY;
 const templateName = process.env.TWO_FACTOR_TEMPLATE_NAME;
 
 export const sendOtpSms = async (phoneNumber, mobileOtp) => {
-
+    
     try {
         const url = `https://2factor.in/API/V1/${apiKey}/SMS/${phoneNumber}/${mobileOtp}/${templateName}`;
         const response = await axios.get(url);
