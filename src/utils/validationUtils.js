@@ -5,7 +5,7 @@ const isValidGmail = (email) => {
 };
 
 const isValidPhone = (phone) => {
-    const regex = /^[6-9]\d{9}$/;
+    const regex = /^\+91[6-9]\d{9}$/;
     return regex.test(phone);
 };
 
@@ -14,5 +14,10 @@ const isValidOtp = (otp) => {
     return regex.test(otp);
 };
 
+const isValidTime = (time) => {
+    const regex = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
+    return regex.test(time);
+};
 
-export { isValidGmail, isValidPhone, isValidOtp };
+
+export { isValidGmail, isValidPhone, isValidOtp, isValidTime };

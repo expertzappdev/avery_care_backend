@@ -8,6 +8,7 @@ import generateToken from '../utils/jwt.js';
 import { sendEmail } from '../config/emailConfig.js';
 import { isValidGmail, isValidOtp } from '../utils/validationUtils.js';
 
+
 // Helper function: To generate and send JWT token
 const createSendToken = (admin, statusCode, res) => {
     const token = generateToken(admin._id);

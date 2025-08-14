@@ -1,5 +1,6 @@
 # Node
 node_modules/
+echo "src/twiliohealthcarebackend-firebase-adminsdk-*.json" >> .gitignore
 
 .env
 

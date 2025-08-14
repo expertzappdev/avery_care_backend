@@ -15,6 +15,10 @@ const transcriptSchema = new mongoose.Schema(
 );
 
 const scheduledCallSchema = new mongoose.Schema({
+  recipientName: {
+    type: String,
+    required: true,
+  },
   scheduledBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
@@ -34,8 +38,8 @@ const scheduledCallSchema = new mongoose.Schema({
     required: true,
   },
   scheduledAtHistory: { // Naya field
-        type: [Date],
-        default: [],
+    type: [Date],
+    default: [],
   },
   startTime: {
     type: Date,
@@ -51,7 +55,7 @@ const scheduledCallSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['pending', 'in-progress','failed','completed', ],
+    enum: ['pending', 'in-progress', 'failed', 'completed',],
     default: 'pending',
   },
   triesLeft: {

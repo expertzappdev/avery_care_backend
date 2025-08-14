@@ -5,9 +5,7 @@ import ScheduledCall from '../models/scheduledCallSummary.js';
 import User from '../models/user.js';
 import twilioClient from '../config/twilio.js';
 import { scheduleNewCall } from '../jobs/callScheduler.js';
-import FamilyMember from '../models/familyMember.js';
-
-if (!process.env.GEMINI_API_KEY) {
+import FamilyMember from '../models/familyMember.js'; if (!process.env.GEMINI_API_KEY) {
     throw new Error('GEMINI_API_KEY .env file mein set nahi hai.');
 }
 
@@ -40,7 +38,7 @@ export const triggerCall = async (phoneNumber, callId) => {
             url: voiceUrl,
             to: phoneNumber,
             from: process.env.TWILIO_PHONE_NUMBER,
-            statusCallback: statusCallbackUrl, // Twilio ko status update bhejne ke liye kaha gaya hai
+            statusCallback: statusCallbackUrl,
             statusCallbackEvent: ['answered', 'completed', 'failed', 'no-answer'],
             statusCallbackMethod: 'POST',
         });
@@ -201,6 +199,7 @@ export const handleSpeech = async (req, res) => {
 //     try {
 //         console.log(`Controller: handleCallStatus webhook hit. Call SID: ${callSid}, Status: ${callStatus}`);
 //         const scheduledCall = await ScheduledCall.findOne({ callSid });
+
 //         if (!scheduledCall) {
 //             console.error(`Controller: Scheduled call with SID ${callSid} not found.`);
 //             return res.status(404).send();
@@ -209,38 +208,41 @@ export const handleSpeech = async (req, res) => {
 //         const updates = {};
 //         let shouldReschedule = false;
 
+//         // Condition for a successful call
 //         if (callStatus === 'completed' && parseInt(callDuration, 10) > 0) {
-//             console.log(`Controller: Call ID ${scheduledCall._id} answered. Status 'completed' par set kar rahe hain.`);
+//             console.log(`Controller: Call ID ${scheduledCall._id} was answered. Setting status to 'completed'.`);
 //             updates.status = 'completed';
 //             updates.endTime = new Date();
 //             updates.durationInSeconds = parseInt(callDuration, 10);
 //             updates.triesLeft = 0;
 //         }
+//         // Conditions for a failed/unanswered call
 //         else if (callStatus === 'no-answer' || callStatus === 'failed' || (callStatus === 'completed' && parseInt(callDuration, 10) === 0)) {
 //             updates.triesLeft = scheduledCall.triesLeft - 1;
 //             console.log(`Controller: Call ID ${scheduledCall._id} failed/not answered. TriesLeft updated to ${updates.triesLeft}.`);
 
 //             if (updates.triesLeft <= 0) {
-//                 console.log(`Controller: Call ID ${scheduledCall._id} failed. TriesLeft 0 hai, isliye call finaly 'failed' ho gaya.`);
+//                 console.log(`Controller: Call ID ${scheduledCall._id} failed. TriesLeft is 0, setting final status to 'failed'.`);
 //                 updates.status = 'failed';
 //                 updates.endTime = new Date();
 //             } else {
+//                 // Set status to 'in-progress' for subsequent retries
+//                 updates.status = 'in-progress';
 //                 const nextAttemptTime = new Date();
-//                 nextAttemptTime.setMinutes(nextAttemptTime.getMinutes() + 15); // Yahan 5 se 15 minutes kar diya gaya hai
+//                 nextAttemptTime.setMinutes(nextAttemptTime.getMinutes() + 15);
 
 //                 updates.scheduledAt = nextAttemptTime;
 //                 updates.$push = { scheduledAtHistory: nextAttemptTime };
-//                 updates.status = 'pending';
 //                 shouldReschedule = true;
-//                 console.log(`Controller: Call ID ${scheduledCall._id} ko naye time (${nextAttemptTime.toISOString()}) par dobara schedule kiya gaya hai.`);
+//                 console.log(`Controller: Call ID ${scheduledCall._id} rescheduled for new time: ${nextAttemptTime.toISOString()}`);
 //             }
 //         }
 //         else {
-//             console.log(`Controller: Call ID ${scheduledCall._id} ka status unhandled: ${callStatus}. Koi update nahi.`);
+//             console.log(`Controller: Call ID ${scheduledCall._id} received an unhandled status: ${callStatus}. No update will be made.`);
 //         }
 
 //         await ScheduledCall.updateOne({ _id: scheduledCall._id }, updates);
-//         console.log(`Controller: Database mein Call ID ${scheduledCall._id} status updated to ${updates.status}.`);
+//         console.log(`Controller: Database updated for Call ID ${scheduledCall._id}. New status: ${updates.status}.`);
 
 //         if (shouldReschedule) {
 //             const updatedCall = await ScheduledCall.findById(scheduledCall._id);
@@ -251,11 +253,10 @@ export const handleSpeech = async (req, res) => {
 
 //         res.status(200).send();
 //     } catch (err) {
-//         console.error('Controller: handleCallStatus mein ERROR:', err.message);
+//         console.error('Controller: Error in handleCallStatus:', err.message);
 //         res.status(500).send();
 //     }
 // };
-
 
 export const handleCallStatus = async (req, res) => {
     const callSid = req.body.CallSid;
@@ -265,7 +266,7 @@ export const handleCallStatus = async (req, res) => {
     try {
         console.log(`Controller: handleCallStatus webhook hit. Call SID: ${callSid}, Status: ${callStatus}`);
         const scheduledCall = await ScheduledCall.findOne({ callSid });
-        
+
         if (!scheduledCall) {
             console.error(`Controller: Scheduled call with SID ${callSid} not found.`);
             return res.status(404).send();
@@ -281,8 +282,9 @@ export const handleCallStatus = async (req, res) => {
             updates.endTime = new Date();
             updates.durationInSeconds = parseInt(callDuration, 10);
             updates.triesLeft = 0;
-        } 
-        // Conditions for a failed/unanswered call
+            // AI Summary generation logic removed as requested
+        }
+        // Conditions for a failed/unanswered call (no-answer, failed, or completed with 0 duration)
         else if (callStatus === 'no-answer' || callStatus === 'failed' || (callStatus === 'completed' && parseInt(callDuration, 10) === 0)) {
             updates.triesLeft = scheduledCall.triesLeft - 1;
             console.log(`Controller: Call ID ${scheduledCall._id} failed/not answered. TriesLeft updated to ${updates.triesLeft}.`);
@@ -293,7 +295,7 @@ export const handleCallStatus = async (req, res) => {
                 updates.endTime = new Date();
             } else {
                 // Set status to 'in-progress' for subsequent retries
-                updates.status = 'in-progress'; 
+                updates.status = 'in-progress';
                 const nextAttemptTime = new Date();
                 nextAttemptTime.setMinutes(nextAttemptTime.getMinutes() + 15);
 
@@ -303,6 +305,7 @@ export const handleCallStatus = async (req, res) => {
                 console.log(`Controller: Call ID ${scheduledCall._id} rescheduled for new time: ${nextAttemptTime.toISOString()}`);
             }
         }
+        // Handle other possible Twilio statuses if needed, otherwise no update
         else {
             console.log(`Controller: Call ID ${scheduledCall._id} received an unhandled status: ${callStatus}. No update will be made.`);
         }
@@ -326,63 +329,139 @@ export const handleCallStatus = async (req, res) => {
 
 export const createScheduledCall = async (req, res) => {
     try {
-        console.log("createScheduledCall API hit.");
+        console.log("📞 createScheduledCall API hit.");
+
         const { scheduledTo, scheduledAt } = req.body;
-        if (!scheduledTo || !scheduledAt) {
-            console.error("Missing required fields (scheduledTo or scheduledAt).");
-            return res.status(400).json({ message: 'Missing required fields' });
-        }
         const scheduledBy = req.user._id;
-        console.log("User ID se family member check kar rahe hain.");
-        const user = await User.findById(scheduledBy).select('familyMembers');
+
+        // Step 1: Validate input
+        if (!scheduledTo || !scheduledAt) {
+            console.error("❌ Missing required fields.");
+            return res.status(400).json({
+                success: false,
+                message: 'Missing required fields: scheduledTo or scheduledAt'
+            });
+        }
+
+        // Step 2: Fetch current user with family members
+        const user = await User.findById(scheduledBy).select('name phoneNumber familyMembers');
         if (!user) {
-            console.error('Controller: User not found.');
-            return res.status(404).json({ message: 'User not found' });
+            console.error("❌ User not found.");
+            return res.status(404).json({ success: false, message: 'User not found' });
         }
 
-        const isLinked = user.familyMembers.some((fm) =>
-            fm.member.toString() === scheduledTo
-        );
-        if (!isLinked) {
-            console.error(`Family member ID ${scheduledTo} user se linked nahi hai.`);
-            return res
-                .status(400)
-                .json({ message: 'This family member is not linked to the user cannot schedule call' });
+        let receiver;
+
+        // Step 3: If self-call → use user details
+        if (scheduledBy.toString() === scheduledTo.toString()) {
+            console.log("🔄 Self-call scheduling detected. Using user details as receiver.");
+            receiver = { name: user.name, phoneNumber: user.phoneNumber };
+        }
+        // Step 4: Else → validate family member link & fetch
+        else {
+            const isLinked = user.familyMembers.some(fm => fm.member.toString() === scheduledTo);
+            if (!isLinked) {
+                console.error(`❌ Family member ${scheduledTo} is not linked to user ${scheduledBy}.`);
+                return res.status(400).json({
+                    success: false,
+                    message: 'This family member is not linked to the user, cannot schedule call.'
+                });
+            }
+
+            receiver = await FamilyMember.findById(scheduledTo).select('name phoneNumber');
+            if (!receiver || !receiver.phoneNumber) {
+                console.error("❌ Receiver user or phone number not found.");
+                return res.status(404).json({
+                    success: false,
+                    message: 'Receiver user or phone number not found.'
+                });
+            }
+            if (receiver.isUser) {
+                console.error("❌ This member is registered, cannot schedule call");
+                return res.status(409).json({
+                    success: false,
+                    message: 'This member is already a registered user. Cannot schedule a call.'
+                });
+            }
         }
 
-        const receiver = await FamilyMember.findById(scheduledTo);
-        if (!receiver || !receiver.phoneNumber) {
-            console.error('Controller: Receiver user ya phone number nahi mila.');
-            return res.status(404).json({ message: 'Receiver user or phone number not found' });
-        }
-
+        // Step 5: Create call entry
         const initialScheduledAt = new Date(scheduledAt);
-
         const newCall = await ScheduledCall.create({
+            recipientName: receiver.name,
             scheduledBy,
             scheduledTo,
             recipientNumber: receiver.phoneNumber,
             scheduledAt: initialScheduledAt,
-            triesLeft: 3, 
+            triesLeft: 3,
             scheduledAtHistory: [initialScheduledAt],
         });
 
-        console.log(`Controller: Naya call schedule ho gaya. Call ID: ${newCall._id}`);
+        console.log(`✅ Call scheduled successfully. Call ID: ${newCall._id}`);
 
+        // Step 6: Schedule the call in background
         scheduleNewCall(newCall);
 
+        // Step 7: Send response
         res.status(201).json({
+            success: true,
             message: 'Call scheduled successfully',
-            scheduledCall: newCall,
+            scheduledCall: newCall
         });
+
     } catch (err) {
-        console.error('Controller: Error scheduling call:', err.message);
-        res.status(500).json({ message: 'Server error' });
+        console.error('❌ Error scheduling call:', err);
+        res.status(500).json({
+            success: false,
+            message: 'Server error'
+        });
     }
 };
 
+export const getAllScheduledCalls = async (req, res) => {
+    try {
+        console.log("Controller: getAllScheduledCalls API hit.");
+
+        const userId = req.user._id;
+        console.log("Controller: Authenticated user ID is:", userId);
+
+        if (!userId) {
+            console.error("Controller: User ID is missing from request.");
+            return res.status(401).json({
+                success: false,
+                message: 'User not authenticated.'
+            });
+        }
+
+        const startTime = Date.now();
+
+        // Fetch calls with lean for better performance
+        const calls = await ScheduledCall.find({ scheduledBy: userId })
+            .sort({ scheduledAt: -1 })
+            .lean();
+
+        const execTime = Date.now() - startTime;
+        console.log(`Controller: Found ${calls.length} scheduled calls. Execution time: ${execTime}ms`);
+
+        res.status(200).json({
+            success: true,
+            count: calls.length,
+            data: calls
+        });
+
+    } catch (err) {
+        console.error('Controller: Error fetching scheduled calls:', err.message);
+        res.status(500).json({
+            success: false,
+            message: 'Server error fetching scheduled calls.'
+        });
+    }
+};
+
+
 export const updateScheduledCall = async (req, res) => {
     try {
+
         const { id, scheduledAt } = req.body;
         console.log(`Controller: Attempting to update scheduled call with ID: ${id}`);
 
@@ -390,18 +469,30 @@ export const updateScheduledCall = async (req, res) => {
             console.error('Controller: Missing required fields for updating scheduled call.');
             return res.status(400).json({ message: 'ID and scheduledAt are required.' });
         }
-        
+        if (!isValidTime(scheduledAt)) {
+            console.error("❌ Invalid time format.");
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid time format. Expected HH:mm (24-hour) format'
+            });
+        }
         const call = await ScheduledCall.findById(id);
-
         if (!call) {
             console.log(`Controller: Scheduled call with ID ${id} not found.`);
             // User requested a specific message for this case
-            return res.status(404).json({ message: 'No call scheduled for this user.' }); 
+            return res.status(404).json({ message: 'No scheduled call found.' });
+        }
+        const primaryUserId = req.user._id;
+
+        if (primaryUserId.toString() !== call.scheduledBy.toString()) {
+            console.log(`❌ User ${primaryUserId} is not the owner of call ${call._id}, cannot update.`);
+
+            return res.status(403).json({ message: 'You are not authorised to update this call.' });
         }
 
         if (call.status !== 'pending') {
             console.log(`Controller: Call status is not pending. Cannot update. Current status: ${call.status}`);
-            return res.status(400).json({ message: `Cannot update call. Status is ${call.status}.` });
+            return res.status(400).json({ message: `Cannot update pending or in-progress call. Status is ${call.status}.` });
         }
 
         // Agar sab sahi hai, to scheduledAt ko update karo
@@ -410,9 +501,9 @@ export const updateScheduledCall = async (req, res) => {
         call.scheduledAtHistory.push(newScheduledAt);
 
         await call.save();
-        
+
         console.log(`Controller: Successfully updated scheduled call with ID: ${id}. New scheduled time: ${call.scheduledAt.toISOString()}`);
-        
+
         // Naye time ke liye call ko reschedule karo
         scheduleNewCall(call);
 
@@ -455,5 +546,46 @@ export const deleteScheduledCall = async (req, res) => {
     } catch (error) {
         console.error('Controller: Error deleting scheduled call.', error.message);
         res.status(500).json({ message: 'Server error deleting scheduled call.' });
+    }
+};
+
+export const getScheduledCalls = async (req, res) => {
+    try {
+        const { fmid } = req.body;
+        const userId = req.user._id;
+        // Check karo ki userId aur fmid request body mein hain ya nahi
+        if (!userId || !fmid) {
+            return res.status(400).json({
+                success: false,
+                message: 'userId and fmid are required fields.',
+            });
+        }
+
+        // Scheduled calls ko database se find karo
+        const scheduledCalls = await ScheduledCall.find({
+            scheduledTo: fmid,
+            scheduledBy: userId,
+        });
+
+        // Agar koi calls nahi milte hain, toh ek empty object return karo
+        if (scheduledCalls.length === 0) {
+            return res.status(200).json({});
+        }
+
+        // Data ko tumhare specified format mein transform karo
+        const transformedData = scheduledCalls.reduce((acc, call) => {
+            acc[call._id.toString()] = call;
+            return acc;
+        }, {});
+
+        // Final transformed object ko response mein send karo
+        res.status(200).json(transformedData);
+
+    } catch (error) {
+        console.error('Error fetching scheduled calls:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Internal Server Error',
+        });
     }
 };

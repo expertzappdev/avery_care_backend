@@ -38,8 +38,15 @@ const addFamilyMember = async (req, res) => {
 		}
 		const sanitizedRelation = relationship.trim().toLowerCase();
 		console.log("sanitizedRelation", sanitizedRelation)
-		//-------------------checks exising user this same relationship ------------------------------------
 		const primaryUser = await User.findById(currentUserId);
+		//-------------------checks email and phone matches with current user | Self linking not allowed ------------------------------------
+		if (primaryUser.email === email || primaryUser.phoneNumber === phoneNumber) {
+			return res.status(400).json({
+				success: false,
+				message: 'Self Linking is not allowed.'
+			});
+		}
+		//-------------------checks exising user this same relationship ------------------------------------
 		const existingRelation = primaryUser.familyMembers.find(fm => fm.relationship === sanitizedRelation);
 
 		if (existingRelation) {
@@ -235,7 +242,6 @@ const getFamilyMembers = async (req, res) => {
 		res.status(500).json({ message: 'Server error' });
 	}
 }
-
 
 const updateFamilyMember = asyncHandler(async (req, res) => {
 

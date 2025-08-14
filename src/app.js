@@ -1,7 +1,7 @@
 import express from 'express';
 import dotenv from 'dotenv';
 import cors from 'cors';
-import mainRoutes from './routes/index.js'; // combined routes
+import mainRoutes from './routes/index.js';
 import { notFound, errorHandler } from './middlewares/errorMiddleware.js';
 dotenv.config();
 
