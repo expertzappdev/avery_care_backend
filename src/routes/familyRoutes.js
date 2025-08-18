@@ -10,16 +10,17 @@ import { protect } from '../middlewares/authMiddleware.js';
 
 const router = express.Router();
 
+router.use(protect)
 // 👨‍👩‍👧 Add new family member
-router.post('/', protect, addFamilyMember);
+router.post('/', addFamilyMember);
 
 // 📥 Get all family members of the logged-in user
-router.get('/fetchFamilyMembers', protect, getFamilyMembers);
+router.get('/fetchFamilyMembers', getFamilyMembers);
 
 // 🛠️ Update specific family member by ID
-router.put('/:familyMemberId', protect, updateFamilyMember);
+router.put('/:familyMemberId', updateFamilyMember);
 
 // 🗑️ Delete specific family member by ID
-router.delete('/:familyMemberId', protect, deleteFamilyMember);
+router.delete('/:familyMemberId', deleteFamilyMember);
 
 export default router;

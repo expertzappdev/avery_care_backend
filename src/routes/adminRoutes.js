@@ -1,27 +1,35 @@
 import express from 'express';
 import {
-    adminLogin, verifyAdminOtp, getAllUsers, getSingleUserWithFamilyMembers,
-    deleteUser, getAllFamilyMembers, getSingleFamilyMember, deleteFamilyMember
+    getUsers, getSingleUserWithFamilyMembers, deleteUser,
+    familyMembers, getSingleFamilyMember, deleteFamilyMember,
+    getScheduledCalls, deleteScheduledCall
 } from '../controllers/adminController.js';
-import { adminProtect } from '../middlewares/authMiddleware.js';
+import { protect, adminOnly } from '../middlewares/authMiddleware.js';
 
 const router = express.Router();
 
-// Admin Authentication Routes (No protection)
-router.post('/auth/login', adminLogin);
-router.post('/auth/verify-otp', verifyAdminOtp);
-
 // Admin Protected Routes
-router.use(adminProtect); // Protection for all routes below this
+router.use(protect, adminOnly);
 
 // User Management
-router.get('/users', getAllUsers);
-router.get('/users/:id', getSingleUserWithFamilyMembers);
-router.delete('/users/:id', deleteUser); // Cleaned up route
+router.get('/getUsers', getUsers);
+
+router.get('/user/:id', getSingleUserWithFamilyMembers);
+
+router.delete('/user/:id', deleteUser);
 
 // Family Member Management
-router.get('/family-members', getAllFamilyMembers);
-router.get('/family-members/:id', getSingleFamilyMember);
-router.delete('/family-members/:id', deleteFamilyMember); // Cleaned up route
+
+router.get('/familyMembers', familyMembers);
+
+router.get('/familyMember/:id', getSingleFamilyMember);
+
+router.delete('/familyMember/:id', deleteFamilyMember);
+
+// Call Management 
+
+router.get('/getScheduledCalls', getScheduledCalls);
+
+router.delete('/deleteScheduledCall/:id', deleteScheduledCall);
 
 export default router;
