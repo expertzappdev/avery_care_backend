@@ -201,53 +201,123 @@ const addFamilyMember = async (req, res) => {
 	}
 };
 
-//get family members
+// const getFamilyMembers = async (req, res) => {
+// 	try {
+// 		const userId = req.user._id; // token se mila hua user ID (auth middleware se)
+
+// 		const user = await User.findById(userId)
+// 			.populate({
+// 				path: 'familyMembers.member',
+// 				select: 'name email phoneNumber', // sirf ye fields chahiye
+// 			})
+// 			.select('familyMembers');
+
+// 		if (!user) {
+// 			return res.status(404).json({ message: 'User not found' });
+// 		}
+// 		if (!user.familyMembers || user.familyMembers.length === 0) {
+// 			return res.status(404).json({ message: 'No family members linked' });
+// 		}
+// 		const formattedFamily = [];
+// 		if (user.familyMembers && user.familyMembers.length > 0) {
+// 			for (let fm of user.familyMembers) {
+// 				const member = fm.member; // This is the populated FamilyMember document
+// 				// Only push if the member was successfully populated and exists
+// 				if (member) {
+// 					formattedFamily.push({
+// 						_id: member._id, // Important for frontend keys and delete operations
+// 						name: member.name,
+// 						relationship: fm.relationship, // This is the relationship for *this* user
+// 						email: member.email,
+// 						phone: member.phoneNumber, // Using 'phone' for consistency with frontend
+// 						isUser: member.isUser,
+// 						userId: member.userId // If it's a registered user, this will be their user ID
+// 					});
+// 				}
+// 			}
+
+// 			res.status(200).json(formattedFamily);
+// 		}
+// 	} catch (error) {
+// 		console.error(error);
+// 		res.status(500).json({ message: 'Server error' });
+// 	}
+// }
+
 const getFamilyMembers = async (req, res) => {
 	try {
 		const userId = req.user._id; // token se mila hua user ID (auth middleware se)
+		const { page = 1, limit = 10 } = req.query; // default page=1, limit=10
+		const skip = (page - 1) * limit;
 
-		const user = await User.findById(userId)
-			.populate({
-				path: 'familyMembers.member',
-				select: 'name email phoneNumber', // sirf ye fields chahiye
-			})
-			.select('familyMembers');
-
+		// Total docs count ke liye pehle user ke familyMembers ka size nikalna padega
+		const user = await User.findById(userId).select('familyMembers');
 		if (!user) {
 			return res.status(404).json({ message: 'User not found' });
 		}
 		if (!user.familyMembers || user.familyMembers.length === 0) {
 			return res.status(404).json({ message: 'No family members linked' });
 		}
-		const formattedFamily = [];
-		if (user.familyMembers && user.familyMembers.length > 0) {
-			for (let fm of user.familyMembers) {
-				const member = fm.member; // This is the populated FamilyMember document
-				// Only push if the member was successfully populated and exists
-				if (member) {
-					formattedFamily.push({
-						_id: member._id, // Important for frontend keys and delete operations
-						name: member.name,
-						relationship: fm.relationship, // This is the relationship for *this* user
-						email: member.email,
-						phone: member.phoneNumber, // Using 'phone' for consistency with frontend
-						isUser: member.isUser,
-						userId: member.userId // If it's a registered user, this will be their user ID
-					});
-				}
-			}
 
-			res.status(200).json(formattedFamily);
+		const totalFamilyMembers = user.familyMembers.length;
+
+		// Slice karke sirf required page ke members nikal rahe hai
+		const paginatedFamily = user.familyMembers.slice(skip, skip + parseInt(limit));
+
+		// Ab populate karenge sirf paginated family members
+		const populatedUser = await User.findById(userId)
+			.populate({
+				path: 'familyMembers.member',
+				select: 'name email phoneNumber isUser userId',
+				options: { skip, limit: parseInt(limit) },
+			})
+			.select('familyMembers');
+
+		const formattedFamily = [];
+		for (let fm of populatedUser.familyMembers) {
+			const member = fm.member;
+			if (member) {
+				formattedFamily.push({
+					_id: member._id,
+					name: member.name,
+					relationship: fm.relationship,
+					email: member.email,
+					phone: member.phoneNumber,
+					isUser: member.isUser,
+					userId: member.userId,
+				});
+			}
 		}
+
+		// Remaining calculation
+		const shownTillNow = page * limit;
+		const remaining = totalFamilyMembers > shownTillNow ? totalFamilyMembers - shownTillNow : 0;
+
+		res.status(200).json({
+			data: formattedFamily,
+			meta: {
+				total: totalFamilyMembers, // total docs
+				page: parseInt(page),      // current page
+				limit: parseInt(limit),    // per page
+				remaining,                 // baaki docs count
+				hasNextPage: remaining > 0 // frontend decide karega next button dikhana hai ya nahi
+			}
+		});
 	} catch (error) {
 		console.error(error);
 		res.status(500).json({ message: 'Server error' });
 	}
-}
+};
 
 const updateFamilyMember = asyncHandler(async (req, res) => {
 
 	const { familyMemberId } = req.params;
+	if (!familyMemberId || !isValidObjectId(familyMemberId)) {
+		return res.status(400).json({
+			success: false,
+			message: "Invalid ID format",
+		});
+	}
 	console.log("➡️ Incoming update request for familyMemberId:", familyMemberId);
 	const primaryUserId = req.user._id;
 	console.log("➡️ Request from user ID:", primaryUserId);
@@ -260,6 +330,17 @@ const updateFamilyMember = asyncHandler(async (req, res) => {
 	if (!name || !email || !phoneNumber || !relationship) {
 		res.status(400);
 		throw new Error('Please enter all fields: name, email, phone number, and relationship for update.');
+	}
+	// Validate the format of the new phone number
+	if (!isValidPhone(phoneNumber)) {
+		res.status(400);
+		throw new Error('Invalid phone number, Must be an Indian number with country code (+91) and 10 digits starting with 6, 7, 8, or 9.');
+	}
+
+	// Validate the format of the new email
+	if (!isValidGmail(email)) {
+		res.status(400);
+		throw new Error('Invalid email format for family member. Only @gmail.com emails are allowed.');
 	}
 	console.log("📝 Incoming update data after verify:", { name, phoneNumber, relationship, email });
 	// --- End Initial Input Validation ---
@@ -275,10 +356,10 @@ const updateFamilyMember = asyncHandler(async (req, res) => {
 		return res.status(200).json({ message: `A family member with relation '${sanitizedRelation}' already exists.` });
 	}
 	if (primaryUser.email === email || primaryUser.phoneNumber === phoneNumber) {
-			return res.status(400).json({
-				success: false,
-				message: 'Self Linking is not allowed.'
-			});
+		return res.status(400).json({
+			success: false,
+			message: 'Self Linking is not allowed.'
+		});
 	}
 	// Find the global family member document by ID
 
@@ -309,17 +390,7 @@ const updateFamilyMember = asyncHandler(async (req, res) => {
 	}
 	// --- End Logic ---
 
-	// Validate the format of the new phone number
-	if (!isValidPhone(phoneNumber)) {
-		res.status(400);
-		throw new Error('Invalid phone number, Must be an Indian number with country code (+91) and 10 digits starting with 6, 7, 8, or 9.');
-	}
-
-	// Validate the format of the new email
-	if (!isValidGmail(email)) {
-		res.status(400);
-		throw new Error('Invalid email format for family member. Only @gmail.com emails are allowed.');
-	}
+	
 
 	// --- Uniqueness checks for updated email/phone ---
 	// If email is changing, check if the new email is already used by another global FamilyMember (excluding current FM)
@@ -386,9 +457,14 @@ const updateFamilyMember = asyncHandler(async (req, res) => {
 	});
 });
 
-
 const deleteFamilyMember = asyncHandler(async (req, res) => {
 	const { familyMemberId } = req.params;
+	if (!familyMemberId || !isValidObjectId(familyMemberId)) {
+		return res.status(400).json({
+			success: false,
+			message: "Invalid ID format",
+		});
+	}
 	console.log("🔍 Requested to delete family member ID:", familyMemberId);
 	console.log("🔐 Request made by user ID:", req.user._id);
 

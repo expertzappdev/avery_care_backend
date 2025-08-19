@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 // Check email ends with @gmail.com 
 const isValidGmail = (email) => {
     const regex = /^[a-zA-Z0-9._%+-]+@gmail\.com$/;
@@ -14,10 +15,18 @@ const isValidOtp = (otp) => {
     return regex.test(otp);
 };
 
-const isValidTime = (time) => {
-    const regex = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
-    return regex.test(time);
+const isValidISOStringDate = (dateString) => {
+    if (typeof dateString !== 'string' || dateString.trim() === '') {
+        return false; // Agar string nahi hai ya khaali hai
+    }
+    const date = new Date(dateString);
+    // Check if the date is valid and if its ISO string representation matches the input (optional but good for strictness)
+    return !isNaN(date.getTime()); // Check if date is not "Invalid Date"
 };
 
+const isValidObjectId = (id) => {
+    // Check if the ID is a string and matches the 24-character hexadecimal pattern
+    return mongoose.Types.ObjectId.isValid(id)
+};
 
-export { isValidGmail, isValidPhone, isValidOtp, isValidTime };
+export { isValidGmail, isValidPhone, isValidOtp, isValidISOStringDate, isValidObjectId };

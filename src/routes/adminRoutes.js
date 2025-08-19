@@ -12,7 +12,7 @@ const router = express.Router();
 router.use(protect, adminOnly);
 
 // User Management
-router.get('/getUsers', getUsers);
+router.get('/users', getUsers);
 
 router.get('/user/:id', getSingleUserWithFamilyMembers);
 
@@ -28,7 +28,7 @@ router.delete('/familyMember/:id', deleteFamilyMember);
 
 // Call Management 
 
-router.get('/getScheduledCalls', getScheduledCalls);
+router.get('/scheduledCalls', getScheduledCalls);
 
 router.delete('/deleteScheduledCall/:id', deleteScheduledCall);
 

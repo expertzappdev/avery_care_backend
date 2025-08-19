@@ -23,7 +23,7 @@ const sendEmail = async (userEmail, subject, text, html) => {
         console.log("Email sent: %s", info.messageId);
     } catch (err) {
         console.error('Email sending failed:', err.message);
-        throw err; // Error ko throw karna zaroori hai taaki calling function ko pata chale
+        throw err; 
     }
 };
 

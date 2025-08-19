@@ -9,5 +9,5 @@ const twilioClient = twilio(
     process.env.TWILIO_ACCOUNT_SID,
     process.env.TWILIO_AUTH_TOKEN
 );
-// module.exports = twilioClient;
+
 export default twilioClient;
