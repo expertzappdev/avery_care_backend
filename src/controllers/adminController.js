@@ -1,269 +1,91 @@
-import Admin from '../models/admin/admin.js';
-import Logs from '../models/admin/logs.js';
 import User from '../models/user.js';
 import FamilyMember from '../models/familyMember.js';
-import bcrypt from 'bcryptjs';
-import generateOTP from '../utils/otp.js';
-import generateToken from '../utils/jwt.js';
-import { sendEmail } from '../config/emailConfig.js';
-import { isValidGmail, isValidOtp } from '../utils/validationUtils.js';
+import ScheduledCall from '../models/scheduledCallSummary.js';
 
+// GET /api/users
+// Example: /api/users?role=admin&isVerified=true&search=john&page=2&limit=10&sort=-createdAt
+// controllers/adminController.js
 
-// Helper function: To generate and send JWT token
-const createSendToken = (admin, statusCode, res) => {
-    const token = generateToken(admin._id);
-
-    // Cookie options for secure production environment
-    const cookieOptions = {
-        expires: new Date(
-            Date.now() + parseInt(process.env.JWT_COOKIE_EXPIRES_IN, 10) * 24 * 60 * 60 * 1000
-        ),
-        httpOnly: true, // Not accessible by client-side JavaScript
-    };
-
-    // Enable secure flag in production
-    if (process.env.NODE_ENV === 'production') cookieOptions.secure = true;
-
-    res.cookie('jwt', token, cookieOptions);
-
-    // Remove sensitive data from response
-    admin.password = undefined;
-    admin.otp = undefined;
-    admin.otpExpiresAt = undefined;
-
-    res.status(statusCode).json({
-        status: 'success',
-        token,
-        data: {
-            admin,
-        },
-    });
-};
-
-// Helper function: To create logs and send email notifications
-const generateLogAndSendEmail = async (email, action, status, message, adminEmailForNotification) => {
+export const getUsers = async (req, res) => {
     try {
-        await Logs.create({ email, action, status, message });
-        if (status === 'failed' && adminEmailForNotification) {
-            const subject = 'Security Alert: Admin Panel Access Attempt';
-            const htmlContent = `
-                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-                    <h2 style="color: #d32f2f;">Security Alert!</h2>
-                    <p>Dear Admin,</p>
-                    <p>Someone attempted to access your admin panel account with the email: <strong>${email}</strong>.</p>
-                    <p>Details: <strong>${message}</strong></p>
-                    <p style="color: #718096;">If this was you, please ignore this email. If not, please change your password immediately.</p>
-                    <p style="color: #718096; font-size: 14px;">Timestamp: ${new Date().toLocaleString()}</p>
-                </div>
-            `;
-            await sendEmail(adminEmailForNotification, subject, '', htmlContent);
-            console.log(`Controller: Security alert email sent to ${adminEmailForNotification}`);
-        }
-    } catch (emailErr) {
-        console.error('Controller: Failed to send security alert email:', emailErr.message);
-    }
-};
+        const { page = 1, limit = 10, role, isVerified, name, email, phoneNumber, createdAtInBetweenStartDate, createdAtInBetweenEndDate, familyMemberName, familyMemberCount } = req.query;
 
-// --- API 1: Admin Login (Sends OTP) ---
-export const adminLogin = async (req, res, next) => {
-    try {
-        const { email, password } = req.body;
+        const query = {};
 
-        // Input validation
-        if (!email || !password) {
-            await generateLogAndSendEmail(
-                email || 'unknown',
-                'login_attempt',
-                'failed',
-                'Email or password missing',
-                null
-            );
-            return res.status(400).json({ message: 'Email and password are required.' });
+        // Normal user filters
+        if (role) query.role = role;
+        if (isVerified) query.isVerified = isVerified === "true";
+
+        if (name) query.name = { $regex: name, $options: "i" };
+        if (email) query.email = { $regex: email, $options: "i" };
+        if (phoneNumber) query.phoneNumber = { $regex: phoneNumber, $options: "i" };
+
+        if (createdAtInBetweenStartDate && createdAtInBetweenEndDate) {
+            query.createdAt = {
+                $gte: new Date(createdAtInBetweenStartDate),
+                $lte: new Date(createdAtInBetweenEndDate),
+            };
         }
 
-        // Validate email format
-        if (!isValidGmail(email)) {
-            await generateLogAndSendEmail(
-                email,
-                'login_attempt',
-                'failed',
-                'Invalid email format (must be Gmail)',
-                null
-            );
-            return res.status(400).json({ message: 'Invalid email format. Please use a valid Gmail address.' });
+        // Aggregation pipeline start
+        const pipeline = [
+            { $match: query },
+
+            // lookup familyMembers
+            {
+                $lookup: {
+                    from: "familymembers", // collection name (lowercase plural of model)
+                    localField: "familyMembers.member",
+                    foreignField: "_id",
+                    as: "familyDetails",
+                },
+            },
+        ];
+
+        // Family member filters
+        if (familyMemberName) {
+            pipeline.push({
+                $match: {
+                    "familyDetails.name": familyMemberName, // full match only
+                },
+            });
         }
 
-        const admin = await Admin.findOne({ email }).select('+password');
-
-        // Check if admin exists and password matches
-        if (!admin || !(await bcrypt.compare(password, admin.password))) {
-            await generateLogAndSendEmail(
-                email,
-                'login_attempt',
-                'failed',
-                'Invalid email or password',
-                admin ? admin.email : null
-            );
-            return res.status(401).json({ message: 'Invalid email or password.' });
+        if (familyMemberCount) {
+            pipeline.push({
+                $match: {
+                    $expr: { $eq: [{ $size: "$familyMembers" }, Number(familyMemberCount)] },
+                },
+            });
         }
 
-        // If credentials are correct, generate and send OTP
-        const otp = generateOTP(); // Using imported generateOTP
-        const otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000); // OTP valid for 10 minutes
+        // Pagination
+        const skip = (Number(page) - 1) * Number(limit);
 
-        admin.otp = otp;
-        admin.otpExpiresAt = otpExpiresAt;
-        await admin.save({ validateBeforeSave: false });
+        // total count (without pagination)
+        const countPipeline = [...pipeline, { $count: "total" }];
+        const countResult = await User.aggregate(countPipeline);
+        const total = countResult.length > 0 ? countResult[0].total : 0;
 
-        await sendEmail(
-            admin.email,
-            'OTP Verification for Admin Login',
-            'Your One Time Password is ',
-            `
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-                <h2 style="color: #2d3748;">Admin Panel Login OTP</h2>
-                <p>Your One Time Password (OTP) for Admin Panel login is:</p>
-                <div style="background: #f7fafc; padding: 16px; border-radius: 4px; 
-                            font-size: 24px; font-weight: bold; text-align: center; 
-                            margin: 16px 0; color: #2b6cb0;">
-                    ${otp}
-                </div>
-                <p><strong>Do not share this code with anyone. It will expire in 10 minutes.</strong></p>
-                <p style="color: #718096; font-size: 14px;">
-                    If you did not request this, please ignore this email.
-                </p>
-            </div>
-            `
-        );
+        // fetch paginated users
+        pipeline.push({ $skip: skip });
+        pipeline.push({ $limit: Number(limit) });
+
+        const users = await User.aggregate(pipeline);
 
         res.status(200).json({
-            status: 'success',
-            message: 'OTP has been sent to your email.',
+            success: true,
+            page: Number(page),
+            limit: Number(limit),
+            totalPages: Math.ceil(total / limit),
+            totalUsers: total,
+            count: users.length,
+            users,
         });
+
     } catch (error) {
-        console.error('Controller: Error in adminLogin:', error.message);
-        await generateLogAndSendEmail(
-            req.body.email || 'unknown',
-            'login_attempt',
-            'failed',
-            `Server error: ${error.message}`,
-            null
-        );
-        res.status(500).json({ message: 'Server error during login process.' });
-    }
-};
-
-// --- API 2: Verifies OTP ---
-export const verifyAdminOtp = async (req, res, next) => {
-    try {
-        const { email, otp } = req.body;
-
-        // Input validation
-        if (!email || !otp) {
-            await generateLogAndSendEmail(
-                email || 'unknown',
-                'otp_attempt',
-                'failed',
-                'Email or OTP missing',
-                null
-            );
-            return res.status(400).json({ message: 'Email and OTP are required.' });
-        }
-
-        // Validate email format
-        if (!isValidGmail(email)) {
-            await generateLogAndSendEmail(
-                email,
-                'otp_attempt',
-                'failed',
-                'Invalid email format (must be Gmail)',
-                null
-            );
-            return res.status(400).json({ message: 'Invalid email format. Please use a valid Gmail address.' });
-        }
-
-        // Validate OTP format
-        if (!isValidOtp(otp)) {
-            await generateLogAndSendEmail(
-                email,
-                'otp_attempt',
-                'failed',
-                'Invalid OTP format (must be 4 digits)', // Assuming isValidOtp expects 4 digits based on regex
-                null
-            );
-            return res.status(400).json({ message: 'Invalid OTP format.' });
-        }
-
-
-        const admin = await Admin.findOne({ email }).select('+otp +otpExpiresAt');
-
-        if (!admin) {
-            await generateLogAndSendEmail(
-                email,
-                'otp_attempt',
-                'failed',
-                'Admin user not found',
-                null
-            );
-            return res.status(401).json({ message: 'Invalid email or OTP.' });
-        }
-
-        // Match OTP and check for expiration
-        if (admin.otp !== otp || admin.otpExpiresAt < Date.now()) {
-            await generateLogAndSendEmail(
-                email,
-                'otp_attempt',
-                'failed',
-                'Incorrect or expired OTP',
-                admin.email
-            );
-            return res.status(401).json({ message: 'Incorrect or expired OTP.' });
-        }
-
-        // If OTP is correct and valid, clear OTP fields and generate JWT token
-        admin.otp = undefined;
-        admin.otpExpiresAt = undefined;
-        await admin.save({ validateBeforeSave: false });
-
-        await generateLogAndSendEmail(
-            email,
-            'otp_attempt',
-            'success',
-            'Admin successfully logged in',
-            admin.email
-        );
-
-        // Send JWT token
-        createSendToken(admin, 200, res);
-    } catch (error) {
-        console.error('Controller: Error in verifyAdminOtp:', error.message);
-        await generateLogAndSendEmail(
-            req.body.email || 'unknown',
-            'otp_attempt',
-            'failed',
-            `Server error: ${error.message}`,
-            null
-        );
-        res.status(500).json({ message: 'Server error during OTP verification.' });
-    }
-};
-
-export const getAllUsers = async (req, res) => {
-    try {
-        console.log('Controller: Attempting to fetch all users...');
-
-        const users = await User.find().select('-password -otpExpiresAt -emailOtp -mobileOtp -__v');
-
-        console.log(`Controller: Successfully fetched ${users.length} users.`);
-
-        res.status(200).json({
-            status: 'success',
-            results: users.length,
-            data: { users },
-        });
-    } catch (error) {
-        console.error('Controller: Error fetching all users. The database query failed.', error.message);
-        res.status(500).json({ message: 'Server error fetching users.' });
+        console.error("Error in getUsersModified:", error);
+        res.status(500).json({ success: false, message: "Server Error", error: error.message });
     }
 };
 
@@ -291,27 +113,91 @@ export const getSingleUserWithFamilyMembers = async (req, res) => {
     }
 };
 
-export const getAllFamilyMembers = async (req, res) => {
-    try {
-        console.log('Controller: Attempting to fetch all family members...');
-        
-        if (!FamilyMember) {
-            console.error('Controller: FamilyMember model is not defined. Check model import.');
-            return res.status(500).json({ message: 'FamilyMember model not found on server.' });
-        }
-        
-        const familyMembers = await FamilyMember.find().select('-__v -linkedToPrimaryUsers -userId');
 
-        console.log(`Controller: Successfully fetched ${familyMembers.length} family members.`);
+export const familyMembers = async (req, res) => {
+    try {
+        const {
+            page = 1,
+            limit = 10,
+            name,
+            email,
+            phoneNumber,
+            isUser,
+            createdAtStartDate,
+            createdAtEndDate,
+            modifiedInBetweenStartDate,
+            modifiedInBetweenEndDate,
+            linkedToPrimaryUserName,
+        } = req.query;
+
+        const query = {};
+
+        // 🔍 Name search
+        if (name) query.name = { $regex: name, $options: 'i' };
+
+        // 🔍 Email search
+        if (email) query.email = { $regex: email, $options: 'i' };
+
+        // 🔍 Phone search
+        if (phoneNumber) query.phoneNumber = { $regex: phoneNumber, $options: 'i' };
+
+        // 🔍 isUser filter
+        if (isUser !== undefined) query.isUser = isUser === 'true';
+
+        // 🔍 CreatedAt date range
+        if (createdAtStartDate || createdAtEndDate) {
+            query.createdAt = {};
+            if (createdAtStartDate) query.createdAt.$gte = new Date(createdAtStartDate);
+            if (createdAtEndDate) query.createdAt.$lte = new Date(createdAtEndDate);
+        }
+
+        // 🔍 UpdatedAt date range
+        if (modifiedInBetweenStartDate || modifiedInBetweenEndDate) {
+            query.updatedAt = {};
+            if (modifiedInBetweenStartDate) query.updatedAt.$gte = new Date(modifiedInBetweenStartDate);
+            if (modifiedInBetweenEndDate) query.updatedAt.$lte = new Date(modifiedInBetweenEndDate);
+        }
+
+        // 🔍 linkedToPrimaryUserName filter
+        if (linkedToPrimaryUserName) {
+            const users = await User.find({
+                name: { $regex: linkedToPrimaryUserName, $options: 'i' },
+            }).select('_id');
+
+            const userIds = users.map((u) => u._id);
+            if (userIds.length > 0) {
+                query.linkedToPrimaryUsers = { $in: userIds };
+            } else {
+
+                return res.status(200).json({
+                    success: true,
+                    data: [],
+                    total: 0,
+                    page: Number(page),
+                    limit: Number(limit),
+                });
+            }
+        }
+
+        // Pagination + Populate
+        const familyMembers = await FamilyMember.find(query)
+            .populate('linkedToPrimaryUsers', 'name email phoneNumber')
+            .skip((page - 1) * limit)
+            .limit(Number(limit))
+            .sort({ createdAt: -1 });
+
+        const total = await FamilyMember.countDocuments(query);
 
         res.status(200).json({
-            status: 'success',
-            results: familyMembers.length,
-            data: { familyMembers },
+            success: true,
+            data: familyMembers,
+            total,
+            page: Number(page),
+            limit: Number(limit),
         });
     } catch (error) {
-        console.error('Controller: Error fetching all family members. The database query failed.', error.message);
-        res.status(500).json({ message: 'Server error fetching all family members.' });
+        console.error('Error fetching family members:', error);
+        res.status(500).json({ success: false, message: 'Server Error', error: error.message });
     }
 };
 
@@ -320,7 +206,7 @@ export const getSingleFamilyMember = async (req, res) => {
     try {
         const { id } = req.params; // Family Member ID from URL parameter
         console.log(`Controller: Attempting to fetch family member with ID: ${id}`);
-        
+
         const familyMember = await FamilyMember.findById(id)
             .select('-__v'); // '__v' field ko hide kiya
 
@@ -330,7 +216,7 @@ export const getSingleFamilyMember = async (req, res) => {
         }
 
         console.log(`Controller: Successfully fetched family member with ID: ${id}`);
-        
+
         res.status(200).json({
             status: 'success',
             data: { familyMember },
@@ -346,7 +232,7 @@ export const deleteUser = async (req, res) => {
     try {
         const { id } = req.params; // User ID from URL parameter
         console.log(`Controller: Attempting to delete user with ID: ${id}`);
-        
+
         const user = await User.findById(id).select('familyMembers email phoneNumber');
 
         if (!user) {
@@ -369,7 +255,7 @@ export const deleteUser = async (req, res) => {
                 idsToUnlink.push(fm._id);
             }
         });
-        
+
         // 3. Un family members ko delete karo jo sirf isi user se linked the
         if (idsToDelete.length > 0) {
             await FamilyMember.deleteMany({ _id: { $in: idsToDelete } });
@@ -397,7 +283,7 @@ export const deleteUser = async (req, res) => {
             const linkedUserIds = matchingFamilyMember.linkedToPrimaryUsers;
 
             console.log(`Controller: Found matching FamilyMember ID: ${familyMemberId}`);
-            
+
             // 3. Unlinked users ke familyMembers array se is family member entry ko hatao
             await User.updateMany(
                 { _id: { $in: linkedUserIds } },
@@ -429,7 +315,7 @@ export const deleteFamilyMember = async (req, res) => {
     try {
         const { id } = req.params;
         console.log(`Controller: Attempting to delete family member with ID: ${id}`);
-        
+
         // 1. Pehle Family Member ko find karo taki linked users ki list mil jaye
         const familyMember = await FamilyMember.findById(id);
 
@@ -437,7 +323,7 @@ export const deleteFamilyMember = async (req, res) => {
             console.log(`Controller: Family member with ID ${id} not found.`);
             return res.status(404).json({ message: 'Family member not found.' });
         }
-        
+
         // 2. Us family member se linked saare users ke document se uski ID hatao
         await User.updateMany(
             { 'familyMembers.member': id },
@@ -449,7 +335,7 @@ export const deleteFamilyMember = async (req, res) => {
         await FamilyMember.findByIdAndDelete(id);
 
         console.log(`Controller: Successfully deleted family member with ID: ${id}`);
-        
+
         res.status(200).json({
             status: 'success',
             message: 'Family member deleted successfully.',
@@ -459,3 +345,190 @@ export const deleteFamilyMember = async (req, res) => {
         res.status(500).json({ message: 'Server error deleting family member.' });
     }
 };
+
+// --- API 7: Calls Scheduled ---
+export const getScheduledCalls = async (req, res) => {
+    try {
+        const {
+            page = 1,
+            limit = 10,
+            recipientName,
+            scheduledByName,
+            scheduledToName,
+            recipientNumber,
+            scheduledAtBeetweenStartDate,//scheduledAtBeetweenStartDate
+            scheduledAtBeetweenEndDate,//scheduledAtBeetweenEndDate
+            durationInSeconds,
+            minDuration,
+            maxDuration,
+            startBetweenStartTime,//startBetweenStartTime
+            startBetweenEndTime,//startBetweenEndTime
+            endBetweenStartTime,//endBetweenStartTime
+            endBetweenEndTime,//endBetweenEndTime
+            status,
+            triesLeft,
+        } = req.query;
+
+        const query = {};
+
+        // 🔍 recipientName
+        if (recipientName) {
+            query.recipientName = { $regex: recipientName, $options: "i" };
+        }
+
+        // 🔍 scheduledByName 
+        if (scheduledByName) {
+            const users = await User.find({
+                name: { $regex: scheduledByName, $options: "i" },
+            }).select("_id");
+            const ids = users.map((u) => u._id);
+            if (ids.length > 0) {
+                query.scheduledBy = { $in: ids };
+            } else {
+                return res.json({
+                    success: true,
+                    data: [],
+                    total: 0,
+                    page: Number(page),
+                    limit: Number(limit),
+                });
+            }
+        }
+
+        // 🔍 scheduledToName 
+        if (scheduledToName) {
+            const fms = await FamilyMember.find({
+                name: { $regex: scheduledToName, $options: "i" },
+            }).select("_id");
+            const ids = fms.map((f) => f._id);
+            if (ids.length > 0) {
+                query.scheduledTo = { $in: ids };
+            } else {
+                return res.json({
+                    success: true,
+                    data: [],
+                    total: 0,
+                    page: Number(page),
+                    limit: Number(limit),
+                });
+            }
+        }
+
+        // 🔍 recipientNumber
+        if (recipientNumber) {
+            query.recipientNumber = { $regex: recipientNumber, $options: "i" };
+        }
+
+        // 🔍 scheduledAt range
+        if (scheduledAtBeetweenStartDate || scheduledAtBeetweenEndDate) {
+            query.scheduledAt = {};
+            if (scheduledAtBeetweenStartDate)
+                query.scheduledAt.$gte = new Date(scheduledAtBeetweenStartDate);
+            if (scheduledAtBeetweenEndDate)
+                query.scheduledAt.$lte = new Date(scheduledAtBeetweenEndDate);
+        }
+
+        // 🔍 durationInSeconds
+        if (durationInSeconds) {
+            query.durationInSeconds = Number(durationInSeconds);
+        }
+
+        // 🔍 durationInSeconds
+        if (minDuration || maxDuration) {
+            query.durationInSeconds = {};
+            if (minDuration) query.durationInSeconds.$gte = Number(minDuration);
+            if (maxDuration) query.durationInSeconds.$lte = Number(maxDuration);
+        }
+        // 🔍 startTime range
+        if (startBetweenStartTime || startBetweenEndTime) {
+            query.startTime = {};
+            if (startBetweenStartTime) query.startTime.$gte = new Date(startBetweenStartTime);
+            if (startBetweenEndTime) query.startTime.$lte = new Date(startBetweenEndTime);
+        }
+
+        // 🔍 endTime range
+        if (endBetweenStartTime || endBetweenEndTime) {
+            query.endTime = {};
+            if (endBetweenStartTime) query.endTime.$gte = new Date(endBetweenStartTime);
+            if (endBetweenEndTime) query.endTime.$lte = new Date(endBetweenEndTime);
+        }
+
+        // 🔍 status
+        if (status) {
+            query.status = status;
+        }
+
+        // 🔍 triesLeft
+        if (triesLeft !== undefined) {
+            query.triesLeft = Number(triesLeft);
+        }
+
+        // Pagination + Populate
+        const calls = await ScheduledCall.find(query)
+            .populate("scheduledBy", "name email phoneNumber")
+            .populate("scheduledTo", "name email phoneNumber")
+            .skip((page - 1) * limit)
+            .limit(Number(limit))
+            .sort({ createdAt: -1 });
+
+        const total = await ScheduledCall.countDocuments(query);
+
+        res.json({
+            success: true,
+            data: calls,
+            total,
+            page: Number(page),
+            limit: Number(limit),
+        });
+    } catch (error) {
+        console.error("Error fetching scheduled calls:", error);
+        res
+            .status(500)
+            .json({ success: false, message: "Server Error", error: error.message });
+    }
+};
+
+export const deleteScheduledCall = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Validate ObjectId
+    if (!id || !id.match(/^[0-9a-fA-F]{24}$/)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid ID format",
+      });
+    }
+
+    const deletedCall = await ScheduledCall.findByIdAndDelete(id);
+
+    if (!deletedCall) {
+      return res.status(404).json({
+        success: false,
+        message: "Scheduled Call not found",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Scheduled Call deleted successfully",
+      data: deletedCall,
+    });
+  } catch (error) {
+    console.error("Error deleting scheduled call:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal Server Error",
+      error: error.message,
+    });
+  }
+};
+
+
+
+
+
+
+
+
+

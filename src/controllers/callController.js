@@ -297,7 +297,7 @@ export const handleCallStatus = async (req, res) => {
                 // Set status to 'in-progress' for subsequent retries
                 updates.status = 'in-progress';
                 const nextAttemptTime = new Date();
-                nextAttemptTime.setMinutes(nextAttemptTime.getMinutes() + 15);
+                nextAttemptTime.setMinutes(nextAttemptTime.getMinutes() + 1);
 
                 updates.scheduledAt = nextAttemptTime;
                 updates.$push = { scheduledAtHistory: nextAttemptTime };
@@ -349,7 +349,13 @@ export const createScheduledCall = async (req, res) => {
             console.error("❌ User not found.");
             return res.status(404).json({ success: false, message: 'User not found' });
         }
-
+        //-------------------checks current user is admin, if yes admin call schedule not allowed ------------------------------------
+        if (user.role === 'admin') {
+            return res.status(400).json({
+                success: false,
+                message: 'call schedule is not allowed to admin'
+            });
+        }
         let receiver;
 
         // Step 3: If self-call → use user details
@@ -458,7 +464,6 @@ export const getAllScheduledCalls = async (req, res) => {
     }
 };
 
-
 export const updateScheduledCall = async (req, res) => {
     try {
 
@@ -519,33 +524,66 @@ export const updateScheduledCall = async (req, res) => {
     }
 };
 
+
 export const deleteScheduledCall = async (req, res) => {
     try {
-        const { id } = req.params;
-        console.log(`Controller: Attempting to delete scheduled call with ID: ${id}`);
+        const { id } = req.params; // call id
+        const { fmid } = req.body; // family member id
+        const userId = req.user._id; // logged in user id (from auth middleware)
 
-        if (!id) {
-            return res.status(400).json({ message: 'Call ID is required for deletion.' });
+        console.log(`Controller: Attempting to delete scheduled call with ID: ${id} by User: ${userId} for FamilyMember: ${fmid}`);
+
+        if (!id || !fmid) {
+            return res.status(400).json({ 
+                status: 'fail',
+                message: 'Call ID and Family Member ID (fmid) are required for deletion.' 
+            });
         }
 
-        const deletedCall = await ScheduledCall.findByIdAndDelete(id);
+        // find call doc
+        const callDoc = await ScheduledCall.findById(id);
 
-        if (!deletedCall) {
+        if (!callDoc) {
             console.log(`Controller: Scheduled call with ID ${id} not found.`);
-            return res.status(404).json({ message: 'Scheduled call not found.' });
+            return res.status(404).json({ 
+                status: 'fail',
+                message: 'Scheduled call not found.' 
+            });
         }
+
+        // check if scheduledBy matches current user
+        if (String(callDoc.scheduledBy) !== String(userId)) {
+            return res.status(403).json({ 
+                status: 'fail',
+                message: 'Not authorized to delete this call (user mismatch).' 
+            });
+        }
+
+        // check if scheduledTo matches fmid
+        if (String(callDoc.scheduledTo) !== String(fmid)) {
+            return res.status(403).json({ 
+                status: 'fail',
+                message: 'Not authorized to delete this call (family member mismatch).' 
+            });
+        }
+
+        // delete if all checks pass
+        await callDoc.deleteOne();
 
         console.log(`Controller: Successfully deleted scheduled call with ID: ${id}.`);
 
         res.status(200).json({
             status: 'success',
             message: 'Scheduled call deleted successfully.',
-            data: { deletedCall },
+            data: { deletedCall: callDoc },
         });
 
     } catch (error) {
         console.error('Controller: Error deleting scheduled call.', error.message);
-        res.status(500).json({ message: 'Server error deleting scheduled call.' });
+        res.status(500).json({ 
+            status: 'error',
+            message: 'Server error deleting scheduled call.' 
+        });
     }
 };
 

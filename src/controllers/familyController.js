@@ -39,6 +39,13 @@ const addFamilyMember = async (req, res) => {
 		const sanitizedRelation = relationship.trim().toLowerCase();
 		console.log("sanitizedRelation", sanitizedRelation)
 		const primaryUser = await User.findById(currentUserId);
+		//-------------------checks current user is admin, if yes Fm linking not allowed ------------------------------------
+		if (primaryUser.role === 'admin') {
+			return res.status(400).json({
+				success: false,
+				message: 'Linking is not allowed. to admin'
+			});
+		}
 		//-------------------checks email and phone matches with current user | Self linking not allowed ------------------------------------
 		if (primaryUser.email === email || primaryUser.phoneNumber === phoneNumber) {
 			return res.status(400).json({
@@ -140,6 +147,7 @@ const addFamilyMember = async (req, res) => {
 			// 	message: 'Family member linked to your account.',
 			// 	familyMember: existingFM,
 			// });
+
 			return res.status(201).json({
 				message: 'Family member linked to your account.',
 				_id: existingFM._id, // Send the ID for frontend's key
@@ -176,12 +184,6 @@ const addFamilyMember = async (req, res) => {
 				},
 			},
 		});
-
-		// return res.status(201).json({
-		// success: true,
-		// message: 'Family member .',
-		// familyMember: newFM,
-		// });
 		res.status(201).json({
 			message: 'Family member processed successfully.',
 			_id: newFM._id, // Send the ID for frontend's key
@@ -272,7 +274,12 @@ const updateFamilyMember = asyncHandler(async (req, res) => {
 	if (existingRelation) {
 		return res.status(200).json({ message: `A family member with relation '${sanitizedRelation}' already exists.` });
 	}
-
+	if (primaryUser.email === email || primaryUser.phoneNumber === phoneNumber) {
+			return res.status(400).json({
+				success: false,
+				message: 'Self Linking is not allowed.'
+			});
+	}
 	// Find the global family member document by ID
 
 	console.log("👨‍👩‍👧‍👦 searching for FamilyMember in DB:", familyMemberId);
