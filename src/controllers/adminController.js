@@ -1,7 +1,8 @@
 import User from '../models/user.js';
 import FamilyMember from '../models/familyMember.js';
 import ScheduledCall from '../models/scheduledCallSummary.js';
-
+import { cancelScheduledCall } from '../jobs/callScheduler.js';
+import { isValidObjectId } from '../utils/validationUtils.js';
 // GET /api/users
 // Example: /api/users?role=admin&isVerified=true&search=john&page=2&limit=10&sort=-createdAt
 // controllers/adminController.js
@@ -92,7 +93,12 @@ export const getUsers = async (req, res) => {
 export const getSingleUserWithFamilyMembers = async (req, res) => {
     try {
         const { id } = req.params; // User ID from URL parameter
-
+        if (!id || !isValidObjectId(id)) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid ID format",
+            });
+        }
         const user = await User.findById(id).populate({
             path: 'familyMembers.member', // User ke familyMembers array ke andar ke 'member' field ko populate karo
             model: 'FamilyMember', // Jis model se populate karna hai
@@ -112,7 +118,6 @@ export const getSingleUserWithFamilyMembers = async (req, res) => {
         res.status(500).json({ message: 'Server error fetching user details.' });
     }
 };
-
 
 export const familyMembers = async (req, res) => {
     try {
@@ -205,6 +210,12 @@ export const familyMembers = async (req, res) => {
 export const getSingleFamilyMember = async (req, res) => {
     try {
         const { id } = req.params; // Family Member ID from URL parameter
+        if (!id || !isValidObjectId(id)) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid ID format",
+            });
+        }
         console.log(`Controller: Attempting to fetch family member with ID: ${id}`);
 
         const familyMember = await FamilyMember.findById(id)
@@ -231,6 +242,12 @@ export const getSingleFamilyMember = async (req, res) => {
 export const deleteUser = async (req, res) => {
     try {
         const { id } = req.params; // User ID from URL parameter
+        if (!id || !isValidObjectId(id)) {
+            return res.status(400).json({
+                success: false,
+                message: "Missing or Invalid ID format",
+            });
+        }
         console.log(`Controller: Attempting to delete user with ID: ${id}`);
 
         const user = await User.findById(id).select('familyMembers email phoneNumber');
@@ -315,7 +332,12 @@ export const deleteFamilyMember = async (req, res) => {
     try {
         const { id } = req.params;
         console.log(`Controller: Attempting to delete family member with ID: ${id}`);
-
+        if (!id || !isValidObjectId(id)) {
+            return res.status(400).json({
+                success: false,
+                message: "Missing or Invalid ID format ",
+            });
+        }
         // 1. Pehle Family Member ko find karo taki linked users ki list mil jaye
         const familyMember = await FamilyMember.findById(id);
 
@@ -489,41 +511,44 @@ export const getScheduledCalls = async (req, res) => {
 };
 
 export const deleteScheduledCall = async (req, res) => {
-  try {
-    const { id } = req.params;
+    try {
+        const { id } = req.params;
 
-    // Validate ObjectId
-    if (!id || !id.match(/^[0-9a-fA-F]{24}$/)) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid ID format",
-      });
+        // Validate ObjectId
+        if (!id || !isValidObjectId(id)) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid ID format",
+            });
+        }
+        // console.log("callsid is : ", deletedCall)
+
+        const isDeletedCall = cancelScheduledCall(id)
+        if (!isDeletedCall) {
+            console.warn(`Controller: Could not cancel active node-cron job for Call ID ${id}. It might have already run or was not scheduled.`);
+        }
+        const deletedCall = await ScheduledCall.findByIdAndDelete(id);
+        if (!deletedCall) {
+            return res.status(404).json({
+                success: false,
+                message: "Scheduled Call not found",
+            });
+        }
+
+        return res.status(200).json({
+            success: true,
+            message: "Scheduled Call deleted successfully",
+            data: deletedCall,
+        });
+    } catch (error) {
+        console.error("Error deleting scheduled call:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Internal Server Error",
+            error: error.message,
+        });
     }
-
-    const deletedCall = await ScheduledCall.findByIdAndDelete(id);
-
-    if (!deletedCall) {
-      return res.status(404).json({
-        success: false,
-        message: "Scheduled Call not found",
-      });
-    }
-
-    return res.status(200).json({
-      success: true,
-      message: "Scheduled Call deleted successfully",
-      data: deletedCall,
-    });
-  } catch (error) {
-    console.error("Error deleting scheduled call:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Internal Server Error",
-      error: error.message,
-    });
-  }
 };
-
 
 
 

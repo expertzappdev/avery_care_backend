@@ -5,10 +5,11 @@ import { handleCallStatus } from '../controllers/callController.js';
 
 const router = express.Router();
 
-
 router.post('/voice', handleVoice);
 
 router.post('/status', handleCallStatus);
+
+router.post('/handle-speech', handleSpeech);
 
 router.use(protect)
 
@@ -18,14 +19,13 @@ router.post('/getScheduledCalls', getScheduledCalls);
 
 router.get('/getAllScheduledCalls', getAllScheduledCalls);
 
-router.post('/update-call', updateScheduledCall);
+router.post('/update-call/:id', updateScheduledCall);
 
 router.delete('/delete-call/:id', deleteScheduledCall);
 
 router.post('/make-call', makeCall);
 
 
-router.post('/handle-speech', handleSpeech);
 
 
 export default router;
