@@ -1,5 +1,5 @@
-import sendEmail from '../config/emailConfig.js';
-import Logs from '../models/admin/logs.js';
+import { sendEmail } from '../config/emailConfig.js';
+import Logs from '../models/logs.js';
 export const generateLogAndSendEmail = async (email, action, status, message, adminEmailForNotification) => {
     try {
         await Logs.create({ email, action, status, message });

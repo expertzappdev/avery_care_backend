@@ -4,57 +4,61 @@ const accountSid = process.env.TWILIO_ACCOUNT_SID;
 const authToken = process.env.TWILIO_AUTH_TOKEN;
 const twilioWhatsAppNumber = process.env.TWILIO_WHATSAPP_NUMBER;
 
-
-// Check if Twilio credentials are set in .env file
 if (!accountSid || !authToken || !twilioWhatsAppNumber) {
     console.error("Twilio credentials .env file mein set nahi hain. WhatsApp feature kaam nahi karega.");
 }
 
-// Initialize the Twilio client
 const client = twilio(accountSid, authToken);
 
 /**
- * Sends a WhatsApp reminder to the user before the call.
- * @param {string} recipientNumber - Recipient's phone number (with country code, e.g., +91XXXXXXXXXX).
- * @param {string} recipientName - Recipient's name.
- * @param {Date} callTime - Scheduled call time.
- * @returns {Promise<string>} - Twilio message SID.
+ * User ko call se pehle ek interactive WhatsApp reminder bhejta hai.
+ * @param {string} recipientNumber - Recipient ka phone number.
+ * @param {string} recipientName - Recipient ka naam.
+ * @param {Date} callTime - Scheduled call ka time.
  */
 export const sendWhatsAppReminder = async (recipientNumber, recipientName, callTime) => {
-    // DEBUG LOG 1: At the start of the function
     console.log(`--- [LOG] sendWhatsAppReminder function shuru hua ---`);
     console.log(`--- [LOG] Recipient: ${recipientName}, Number: ${recipientNumber}`);
 
     try {
-        // Format the number for WhatsApp
         const to = `whatsapp:${recipientNumber}`;
         const from = twilioWhatsAppNumber;
 
-        // Customize the message body
         const formattedTime = callTime.toLocaleTimeString('en-IN', {
             hour: '2-digit',
             minute: '2-digit',
             hour12: true,
             timeZone: 'Asia/Kolkata'
         });
-        const body = `Namaste ${recipientName}, Avery Care se yeh ek friendly reminder hai. Aapki scheduled health check-in call 10 minute mein, lagbhag ${formattedTime} baje hai.`;
 
-        // DEBUG LOG 2: Just before sending the message
+        // Naya interactive message body
+        const body = `Namaste ${recipientName}, Avery Care se reminder.\n\nAapki health call aaj ${formattedTime} baje hai.\n\nReply karein:\n- 'CONFIRM' agar aap available hain.\n- 'RESCHEDULE DD/MM/YYYY HH:MM' agar aap call ko naye time par set karna chahte hain (jaise 'RESCHEDULE 20/08/2024 18:45').`;
+
         console.log(`--- [LOG] Twilio ko message bhejne ki taiyari...`);
-        console.log(`   -> From: ${from}`);
-        console.log(`   -> To: ${to}`);
-        console.log(`   -> Body: "${body}"`);
 
         const message = await client.messages.create({ from, body, to });
 
-        // DEBUG LOG 3: Upon successful message delivery
-        console.log(`✅✅✅ [SUCCESS] WhatsApp reminder safaltapoorvak bheja gaya. SID: ${message.sid}`);
+        console.log(`✅✅✅ [SUCCESS] Interactive WhatsApp reminder safaltapoorvak bheja gaya. SID: ${message.sid}`);
         return message.sid;
 
     } catch (error) {
-        // DEBUG LOG 4: If any error occurs during sending
         console.error(`❌❌❌ [ERROR] WhatsApp reminder ${recipientNumber} par bhejne mein fail hua:`, error.message);
-        console.error("--- [Full Twilio Error Object] ---", error); // Log the full error object
-        throw error; // Re-throw the error
+        throw error;
+    }
+};
+
+/**
+ * User ko ek standard WhatsApp message bhejta hai.
+ * @param {string} recipientNumber - Recipient ka phone number (bina 'whatsapp:' prefix ke).
+ * @param {string} messageBody - Bheja jaane wala message.
+ */
+export const sendWhatsAppReply = async (recipientNumber, messageBody) => {
+    try {
+        const to = `whatsapp:${recipientNumber}`;
+        const from = twilioWhatsAppNumber;
+        await client.messages.create({ from, body: messageBody, to });
+        console.log(`WhatsApp reply to ${recipientNumber} safaltapoorvak bheja gaya.`);
+    } catch (error) {
+        console.error(`WhatsApp reply to ${recipientNumber} bhejne mein fail hua:`, error.message);
     }
 };

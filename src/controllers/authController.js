@@ -1,12 +1,12 @@
-import User from '../models/user.js';
 import generateToken from '../utils/jwt.js';
-import asyncHandler from 'express-async-handler';
-import FamilyMember from '../models/familyMember.js';
 import generateOTP from '../utils/otp.js';
+import User from '../models/user.js';
+import FamilyMember from '../models/familyMember.js';
+import asyncHandler from 'express-async-handler';
 import { isValidOtp, isValidGmail, isValidPhone } from '../utils/validationUtils.js';
 import { sendOtpSms } from '../config/smsConfig.js';
 import { generateLogAndSendEmail } from '../utils/logger.js';
-
+import { sendEmail } from '../config/emailConfig.js';
 const registerUser = asyncHandler(async (req, res) => {
 	const { name, email, phoneNumber, password, role } = req.body;
 
