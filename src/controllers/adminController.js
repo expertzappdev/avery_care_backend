@@ -1,5 +1,5 @@
-import User from '../models/user.js';
-import FamilyMember from '../models/familyMember.js';
+import User from '../models/User.js';
+import FamilyMember from '../models/FamilyMember.js';
 import ScheduledCall from '../models/scheduledCallSummary.js';
 import { cancelScheduledCall } from '../jobs/callScheduler.js';
 import { isValidObjectId } from '../utils/validationUtils.js';

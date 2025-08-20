@@ -1,8 +1,8 @@
 import asyncHandler from 'express-async-handler';
 // Corrected import paths for models (assuming 'models' folder has camelCase names and file names like 'User.js', 'FamilyMember.js')
 // import FamilyMember from '../models/FamilyMember.js';
-import FamilyMember from '../models/familyMember.js'
-import User from '../models/user.js';
+import FamilyMember from '../models/FamilyMember.js'
+import User from '../models/User.js';
 // Corrected import path for validation utilities (assuming 'utils' folder has camelCase names and file name like 'ValidationUtils.js')
 import { isValidGmail, isValidPhone } from '../utils/validationUtils.js';
 

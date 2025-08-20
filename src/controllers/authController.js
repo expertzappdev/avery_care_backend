@@ -1,7 +1,7 @@
 import generateToken from '../utils/jwt.js';
 import generateOTP from '../utils/otp.js';
-import User from '../models/user.js';
-import FamilyMember from '../models/familyMember.js';
+import User from '../models/User.js';
+import FamilyMember from '../models/FamilyMember.js';
 import asyncHandler from 'express-async-handler';
 import { isValidOtp, isValidGmail, isValidPhone } from '../utils/validationUtils.js';
 import { sendOtpSms } from '../config/smsConfig.js';

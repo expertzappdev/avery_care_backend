@@ -1,6 +1,5 @@
 import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
-import FamilyMember from './familyMember';
 const userSchema = new mongoose.Schema(
 	{
 		name: {
