@@ -22,7 +22,7 @@ router.post('/getScheduledCalls', getScheduledCalls);
 
 router.get('/getAllScheduledCalls', getAllScheduledCalls);
 
-router.post('/update-call/:id', updateScheduledCall);
+router.put('/update-call/:id', updateScheduledCall);
 
 router.delete('/delete-call/:id', deleteScheduledCall);
 

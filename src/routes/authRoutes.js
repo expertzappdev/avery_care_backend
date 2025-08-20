@@ -8,5 +8,4 @@ router.post('/verify-otp', verifyOtp);
 // Login route
 router.post('/login', loginUser);
 
-
 export default router;

@@ -409,45 +409,104 @@ export const createScheduledCall = async (req, res) => {
     }
 };
 
+// export const getAllScheduledCalls = async (req, res) => {
+//     try {
+
+//         console.log("Controller: getAllScheduledCalls API hit.");
+
+//         const userId = req.user._id;
+//         console.log("Controller: Authenticated user ID is:", userId);
+
+//         if (!userId) {
+//             console.error("Controller: User ID is missing from request.");
+//             return res.status(401).json({
+//                 success: false,
+//                 message: 'User not authenticated.'
+//             });
+//         }
+
+//         const startTime = Date.now();
+
+//         // Fetch calls with lean for better performance
+//         const calls = await ScheduledCall.find({ scheduledBy: userId })
+//             .sort({ scheduledAt: -1 })
+//             .lean();
+
+//         const execTime = Date.now() - startTime;
+//         console.log(`Controller: Found ${calls.length} scheduled calls. Execution time: ${execTime}ms`);
+
+//         res.status(200).json({
+//             success: true,
+//             count: calls.length,
+//             data: calls
+//         });
+
+//     } catch (err) {
+//         console.error('Controller: Error fetching scheduled calls:', err.message);
+//         res.status(500).json({
+//             success: false,
+//             message: 'Server error fetching scheduled calls.'
+//         });
+//     }
+// };
+
+
 export const getAllScheduledCalls = async (req, res) => {
-    try {
+  try {
+    console.log("Controller: getAllScheduledCalls API hit.");
 
-        console.log("Controller: getAllScheduledCalls API hit.");
+    const userId = req.user._id;
+    console.log("Controller: Authenticated user ID is:", userId);
 
-        const userId = req.user._id;
-        console.log("Controller: Authenticated user ID is:", userId);
-
-        if (!userId) {
-            console.error("Controller: User ID is missing from request.");
-            return res.status(401).json({
-                success: false,
-                message: 'User not authenticated.'
-            });
-        }
-
-        const startTime = Date.now();
-
-        // Fetch calls with lean for better performance
-        const calls = await ScheduledCall.find({ scheduledBy: userId })
-            .sort({ scheduledAt: -1 })
-            .lean();
-
-        const execTime = Date.now() - startTime;
-        console.log(`Controller: Found ${calls.length} scheduled calls. Execution time: ${execTime}ms`);
-
-        res.status(200).json({
-            success: true,
-            count: calls.length,
-            data: calls
-        });
-
-    } catch (err) {
-        console.error('Controller: Error fetching scheduled calls:', err.message);
-        res.status(500).json({
-            success: false,
-            message: 'Server error fetching scheduled calls.'
-        });
+    if (!userId) {
+      console.error("Controller: User ID is missing from request.");
+      return res.status(401).json({
+        success: false,
+        message: "User not authenticated.",
+      });
     }
+
+    const startTime = Date.now();
+
+    // Get pagination params (default page=1, limit=10)
+    const page = parseInt(req.query.page, 10) || 1;
+    const limit = parseInt(req.query.limit, 10) || 10;
+    const skip = (page - 1) * limit;
+
+    // Fetch calls with pagination
+    const calls = await ScheduledCall.find({ scheduledBy: userId })
+      .sort({ scheduledAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean();
+
+    // Total count for pagination metadata
+    const totalCalls = await ScheduledCall.countDocuments({ scheduledBy: userId });
+
+    const totalPages = Math.ceil(totalCalls / limit);
+
+    const execTime = Date.now() - startTime;
+    console.log(
+      `Controller: Found ${calls.length} scheduled calls. Execution time: ${execTime}ms`
+    );
+
+    res.status(200).json({
+      success: true,
+      count: calls.length,
+      page,
+      limit,
+      totalCalls,
+      totalPages,
+      hasNext: page < totalPages, // 👈 yeh batayega ki agla page available hai ya nahi
+      data: calls,
+    });
+  } catch (err) {
+    console.error("Controller: Error fetching scheduled calls:", err.message);
+    res.status(500).json({
+      success: false,
+      message: "Server error fetching scheduled calls.",
+    });
+  }
 };
 
 export const updateScheduledCall = async (req, res) => {
@@ -522,18 +581,17 @@ export const updateScheduledCall = async (req, res) => {
 export const deleteScheduledCall = async (req, res) => {
     try {
         const { id } = req.params; // call id
-        const { fmid } = req.body; // family member id
         const userId = req.user._id; // logged in user id (from auth middleware)
 
-        console.log(`Controller: Attempting to delete scheduled call with ID: ${id} by User: ${userId} for FamilyMember: ${fmid}`);
+        console.log(`Controller: Attempting to delete scheduled call with ID: ${id} by User: ${userId}`);
 
-        if (!id || !fmid) {
+        if (!id) {
             return res.status(400).json({
                 status: 'fail',
                 message: 'Call ID and Family Member ID (fmid) are required for deletion.'
             });
         }
-        if (!isValidObjectId(id) || !isValidObjectId(fmid)) {
+        if (!isValidObjectId(id)) {
             return res.status(400).json({
                 success: false,
                 message: "Invalid ID format",

@@ -6,7 +6,7 @@ import dotenv from 'dotenv';
 // const createDefaultAdmin = async () => {
 //   try {
 //     const email = 'admin@gmail.com';
-//     const plainPassword = 'admin123'; // अपना password डालो
+//     const plainPassword = 'admin123'; 
 
 //     
 //     // const existingAdmin = await Admin.findOne({ email });
