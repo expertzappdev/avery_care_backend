@@ -1,15 +1,13 @@
 import twilio from 'twilio';
 import ScheduledCall from '../models/scheduledCallSummary.js';
 import { scheduleNewCall } from '../jobs/callScheduler.js';
-// sendWhatsAppReply ki ab yahan zaroorat nahi hai
-// import { sendWhatsAppReply } from '../services/whatsappService.js';
 
 const { twiml } = twilio;
 
 /**
- * User ke diye gaye DD/MM/YYYY HH:MM string se Date object banata hai.
- * @param {string} dateTimeString - "DD/MM/YYYY HH:MM" format mein string.
- * @returns {Date|null} - Agar format sahi hai toh Date object, varna null.
+ * User DD/MM/YYYY HH:MM string Date object .
+ * @param {string} dateTimeString - "DD/MM/YYYY HH:MM" format string.
+ * @returns {Date|null} - if formated Date object, otherwise null.
  */
 const parseDateTime = (dateTimeString) => {
     const parts = dateTimeString.match(/^(\d{2})\/(\d{2})\/(\d{4})\s(\d{2}):(\d{2})$/);
@@ -33,14 +31,15 @@ const parseDateTime = (dateTimeString) => {
 
 
 /**
- * Twilio se aane wale incoming WhatsApp replies ko handle karta hai.
+ * Twilio incoming WhatsApp replies handle .
  */
 export const handleWhatsAppReply = async (req, res) => {
     const userReply = req.body.Body?.trim();
     const userNumber = req.body.From.replace('whatsapp:', '');
-    const twimlResponse = new twiml.MessagingResponse(); // Twilio ke liye response object
+    const twimlResponse = new twiml.MessagingResponse();
 
-    console.log(`Incoming WhatsApp reply from ${userNumber}: "${userReply}"`);
+    // --- DEBUG LOG 1: Message receive hua ---
+    console.log(`[LOG] Incoming WhatsApp reply from ${userNumber}: "${userReply}"`);
 
     try {
         const call = await ScheduledCall.findOne({
@@ -49,28 +48,38 @@ export const handleWhatsAppReply = async (req, res) => {
         }).sort({ scheduledAt: 1 });
 
         if (!call) {
-            console.log(`No pending call found for ${userNumber}. Ignoring reply.`);
+            // --- DEBUG LOG 2: Koi pending call nahi mili ---
+            console.log(`[LOG] No pending call found for ${userNumber}.`);
             twimlResponse.message("Maaf kijiye, aapke number ke liye koi active scheduled call nahi mili.");
             return res.type('text/xml').send(twimlResponse.toString());
         }
 
+        // --- DEBUG LOG 3: Pending call mil gayi ---
+        console.log(`[LOG] Found pending call ID: ${call._id} for number ${userNumber}`);
+
         if (userReply.toUpperCase() === 'CONFIRM') {
+            console.log(`[LOG] User ne 'CONFIRM' kiya.`);
             twimlResponse.message("Dhanyavaad! Hum aapse scheduled time par hi baat karenge.");
 
-        } else if (userReply.toUpperCase().startsWith('RESCHEDULE ')) {
-            const dateTimeString = userReply.substring(11).trim();
+        } else if (/^RESCHEDULE\s/i.test(userReply)) { // <-- YEH HAI FIX!
+            console.log(`[LOG] User ne 'RESCHEDULE' request kiya.`);
+            // Naye tareeke se date/time string nikalein
+            const dateTimeString = userReply.replace(/^RESCHEDULE\s/i, '').trim();
             const newTime = parseDateTime(dateTimeString);
 
-            // Step 1: Format check karna
             if (!newTime) {
+                // --- DEBUG LOG 4: Format galat hai ---
+                console.log(`[LOG] Invalid date/time format: "${dateTimeString}"`);
                 twimlResponse.message("Galat format. Kripya 'RESCHEDULE DD/MM/YYYY HH:MM' format mein reply karein (jaise RESCHEDULE 20/08/2025 18:30).");
             } else {
-                // Step 2: Past time check karna
                 const fiveMinutesFromNow = new Date(new Date().getTime() + 5 * 60 * 1000);
                 if (newTime <= fiveMinutesFromNow) {
+                    // --- DEBUG LOG 5: Past ka time hai ---
+                    console.log(`[LOG] User ne past ka time diya: ${newTime.toISOString()}`);
                     twimlResponse.message("Aapne past ka ya bahut nazdeek ka time daala hai. Kripya aane wala time daalein jo ab se kam se kam 5 minute baad ka ho.");
                 } else {
-                    // Step 3: Sab kuch sahi hai, reschedule karke confirmation bhejna
+                    // --- DEBUG LOG 6: Sab kuch sahi, reschedule kar rahe hain ---
+                    console.log(`[LOG] Rescheduling call to: ${newTime.toISOString()}`);
                     call.scheduledAt = newTime;
                     call.scheduledAtHistory.push(newTime);
                     await call.save();
@@ -90,17 +99,15 @@ export const handleWhatsAppReply = async (req, res) => {
                 }
             }
         } else {
-            // Default reply
+            // --- DEBUG LOG 7: Jawab samajh nahi aaya ---
+            console.log(`[LOG] User ka jawab samajh nahi aaya: "${userReply}"`);
             twimlResponse.message("Maaf kijiye, hum aapka jawab samajh nahi paaye. Kripya 'CONFIRM' ya 'RESCHEDULE DD/MM/YYYY HH:MM' format mein reply karein.");
         }
 
-        // Final response Twilio ko bhejein
         res.type('text/xml').send(twimlResponse.toString());
 
     } catch (error) {
-        console.error("WhatsApp reply handle karne mein error:", error);
-        // Error ke case mein Twilio ko khaali response bhejein taaki default message na aaye
+        console.error("[ERROR] WhatsApp reply handle karne mein error:", error);
         res.type('text/xml').status(500).send(new twiml.MessagingResponse().toString());
     }
 };
-

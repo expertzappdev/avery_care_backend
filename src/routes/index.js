@@ -14,6 +14,4 @@ router.use('/calls', callRoutes);
 
 router.use('/admin', adminRoutes);
 
-router.use('/serverCheck', serverCheck)
-
 export default router;

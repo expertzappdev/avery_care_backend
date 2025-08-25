@@ -18,7 +18,7 @@ router.use(protect)
 
 router.post('/scheduleCall', createScheduledCall);
 
-router.post('/getScheduledCalls', getScheduledCalls);
+router.get('/getScheduledCalls', getScheduledCalls);
 
 router.get('/getAllScheduledCalls', getAllScheduledCalls);
 
@@ -29,6 +29,3 @@ router.delete('/delete-call/:id', deleteScheduledCall);
 router.post('/make-call', makeCall);
 
 export default router;
-
-
-

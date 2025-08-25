@@ -1,15 +1,8 @@
 import asyncHandler from 'express-async-handler';
-// Corrected import paths for models (assuming 'models' folder has camelCase names and file names like 'User.js', 'FamilyMember.js')
-// import FamilyMember from '../models/FamilyMember.js';
 import FamilyMember from '../models/FamilyMember.js'
 import User from '../models/User.js';
-// Corrected import path for validation utilities (assuming 'utils' folder has camelCase names and file name like 'ValidationUtils.js')
-import { isValidGmail, isValidPhone } from '../utils/validationUtils.js';
+import { isValidGmail, isValidPhone, isValidObjectId } from '../utils/validationUtils.js';
 
-// @desc    Add a new family member
-// @route   POST /api/family
-// @access  Private (Authenticated User only)
-// const addFamilyMember = asyncHandler(async (req, res) => {
 const addFamilyMember = async (req, res) => {
 	try {
 		const { name, email, phoneNumber, relationship } = req.body;
@@ -201,49 +194,6 @@ const addFamilyMember = async (req, res) => {
 	}
 };
 
-// const getFamilyMembers = async (req, res) => {
-// 	try {
-// 		const userId = req.user._id; // token se mila hua user ID (auth middleware se)
-
-// 		const user = await User.findById(userId)
-// 			.populate({
-// 				path: 'familyMembers.member',
-// 				select: 'name email phoneNumber', // sirf ye fields chahiye
-// 			})
-// 			.select('familyMembers');
-
-// 		if (!user) {
-// 			return res.status(404).json({ message: 'User not found' });
-// 		}
-// 		if (!user.familyMembers || user.familyMembers.length === 0) {
-// 			return res.status(404).json({ message: 'No family members linked' });
-// 		}
-// 		const formattedFamily = [];
-// 		if (user.familyMembers && user.familyMembers.length > 0) {
-// 			for (let fm of user.familyMembers) {
-// 				const member = fm.member; // This is the populated FamilyMember document
-// 				// Only push if the member was successfully populated and exists
-// 				if (member) {
-// 					formattedFamily.push({
-// 						_id: member._id, // Important for frontend keys and delete operations
-// 						name: member.name,
-// 						relationship: fm.relationship, // This is the relationship for *this* user
-// 						email: member.email,
-// 						phone: member.phoneNumber, // Using 'phone' for consistency with frontend
-// 						isUser: member.isUser,
-// 						userId: member.userId // If it's a registered user, this will be their user ID
-// 					});
-// 				}
-// 			}
-
-// 			res.status(200).json(formattedFamily);
-// 		}
-// 	} catch (error) {
-// 		console.error(error);
-// 		res.status(500).json({ message: 'Server error' });
-// 	}
-// }
-
 const getFamilyMembers = async (req, res) => {
 	try {
 		const userId = req.user._id; // token se mila hua user ID (auth middleware se)
@@ -256,7 +206,16 @@ const getFamilyMembers = async (req, res) => {
 			return res.status(404).json({ message: 'User not found' });
 		}
 		if (!user.familyMembers || user.familyMembers.length === 0) {
-			return res.status(404).json({ message: 'No family members linked' });
+			return res.status(200).json({
+				data: [],
+				meta: {
+					total: 0,
+					page: parseInt(page),
+					limit: parseInt(limit),
+					remaining: 0,
+					hasNextPage: false
+				}
+			});
 		}
 
 		const totalFamilyMembers = user.familyMembers.length;

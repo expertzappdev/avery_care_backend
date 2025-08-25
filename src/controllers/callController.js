@@ -409,104 +409,62 @@ export const createScheduledCall = async (req, res) => {
     }
 };
 
-// export const getAllScheduledCalls = async (req, res) => {
-//     try {
-
-//         console.log("Controller: getAllScheduledCalls API hit.");
-
-//         const userId = req.user._id;
-//         console.log("Controller: Authenticated user ID is:", userId);
-
-//         if (!userId) {
-//             console.error("Controller: User ID is missing from request.");
-//             return res.status(401).json({
-//                 success: false,
-//                 message: 'User not authenticated.'
-//             });
-//         }
-
-//         const startTime = Date.now();
-
-//         // Fetch calls with lean for better performance
-//         const calls = await ScheduledCall.find({ scheduledBy: userId })
-//             .sort({ scheduledAt: -1 })
-//             .lean();
-
-//         const execTime = Date.now() - startTime;
-//         console.log(`Controller: Found ${calls.length} scheduled calls. Execution time: ${execTime}ms`);
-
-//         res.status(200).json({
-//             success: true,
-//             count: calls.length,
-//             data: calls
-//         });
-
-//     } catch (err) {
-//         console.error('Controller: Error fetching scheduled calls:', err.message);
-//         res.status(500).json({
-//             success: false,
-//             message: 'Server error fetching scheduled calls.'
-//         });
-//     }
-// };
-
-
 export const getAllScheduledCalls = async (req, res) => {
-  try {
-    console.log("Controller: getAllScheduledCalls API hit.");
+    try {
+        console.log("Controller: getAllScheduledCalls API hit.");
 
-    const userId = req.user._id;
-    console.log("Controller: Authenticated user ID is:", userId);
+        const userId = req.user._id;
+        console.log("Controller: Authenticated user ID is:", userId);
 
-    if (!userId) {
-      console.error("Controller: User ID is missing from request.");
-      return res.status(401).json({
-        success: false,
-        message: "User not authenticated.",
-      });
+        if (!userId) {
+            console.error("Controller: User ID is missing from request.");
+            return res.status(401).json({
+                success: false,
+                message: "User not authenticated.",
+            });
+        }
+
+        const startTime = Date.now();
+
+        // Get pagination params (default page=1, limit=10)
+        const page = parseInt(req.query.page, 10) || 1;
+        const limit = parseInt(req.query.limit, 10) || 10;
+        const skip = (page - 1) * limit;
+
+        // Fetch calls with pagination
+        const calls = await ScheduledCall.find({ scheduledBy: userId })
+            .sort({ scheduledAt: -1 })
+            .skip(skip)
+            .limit(limit)
+            .lean();
+
+        // Total count for pagination metadata
+        const totalCalls = await ScheduledCall.countDocuments({ scheduledBy: userId });
+
+        const totalPages = Math.ceil(totalCalls / limit);
+
+        const execTime = Date.now() - startTime;
+        console.log(
+            `Controller: Found ${calls.length} scheduled calls. Execution time: ${execTime}ms`
+        );
+
+        res.status(200).json({
+            success: true,
+            count: calls.length,
+            page,
+            limit,
+            totalCalls,
+            totalPages,
+            hasNext: page < totalPages, // 👈 yeh batayega ki agla page available hai ya nahi
+            data: calls,
+        });
+    } catch (err) {
+        console.error("Controller: Error fetching scheduled calls:", err.message);
+        res.status(500).json({
+            success: false,
+            message: "Server error fetching scheduled calls.",
+        });
     }
-
-    const startTime = Date.now();
-
-    // Get pagination params (default page=1, limit=10)
-    const page = parseInt(req.query.page, 10) || 1;
-    const limit = parseInt(req.query.limit, 10) || 10;
-    const skip = (page - 1) * limit;
-
-    // Fetch calls with pagination
-    const calls = await ScheduledCall.find({ scheduledBy: userId })
-      .sort({ scheduledAt: -1 })
-      .skip(skip)
-      .limit(limit)
-      .lean();
-
-    // Total count for pagination metadata
-    const totalCalls = await ScheduledCall.countDocuments({ scheduledBy: userId });
-
-    const totalPages = Math.ceil(totalCalls / limit);
-
-    const execTime = Date.now() - startTime;
-    console.log(
-      `Controller: Found ${calls.length} scheduled calls. Execution time: ${execTime}ms`
-    );
-
-    res.status(200).json({
-      success: true,
-      count: calls.length,
-      page,
-      limit,
-      totalCalls,
-      totalPages,
-      hasNext: page < totalPages, // 👈 yeh batayega ki agla page available hai ya nahi
-      data: calls,
-    });
-  } catch (err) {
-    console.error("Controller: Error fetching scheduled calls:", err.message);
-    res.status(500).json({
-      success: false,
-      message: "Server error fetching scheduled calls.",
-    });
-  }
 };
 
 export const updateScheduledCall = async (req, res) => {
@@ -658,52 +616,6 @@ export const deleteScheduledCall = async (req, res) => {
     }
 };
 
-// export const getScheduledCalls = async (req, res) => {
-//     try {
-//         const { fmid } = req.body;
-//         const userId = req.user._id;
-//         // Check karo ki userId aur fmid request body mein hain ya nahi
-//         if (!userId || !fmid) {
-//             return res.status(400).json({
-//                 success: false,
-//                 message: 'userId and fmid are required fields.',
-//             });
-//         }
-//         if (!isValidObjectId(fmid)) {
-//             return res.status(400).json({
-//                 success: false,
-//                 message: "Invalid ID format",
-//             });
-//         }
-//         // Scheduled calls ko database se find karo
-//         const scheduledCalls = await ScheduledCall.find({
-//             scheduledTo: fmid,
-//             scheduledBy: userId,
-//         });
-
-//         // Agar koi calls nahi milte hain, toh ek empty object return karo
-//         if (scheduledCalls.length === 0) {
-//             return res.status(200).json({});
-//         }
-
-//         // Data ko tumhare specified format mein transform karo
-//         const transformedData = scheduledCalls.reduce((acc, call) => {
-//             acc[call._id.toString()] = call;
-//             return acc;
-//         }, {});
-
-//         // Final transformed object ko response mein send karo
-//         res.status(200).json(transformedData);
-
-//     } catch (error) {
-//         console.error('Error fetching scheduled calls:', error);
-//         res.status(500).json({
-//             success: false,
-//             message: 'Internal Server Error',
-//         });
-//     }
-// };
-
 export const getScheduledCalls = async (req, res) => {
     try {
         const {
@@ -736,6 +648,18 @@ export const getScheduledCalls = async (req, res) => {
             query.recipientName = { $regex: recipientName, $options: "i" };
         }
 
+        // if (!isValidISOStringDate()) {
+        //     return res.status(400).json({
+        //         success: false,
+        //         message: "Invalid ID format",
+        //     });
+        // }
+        // if (!isValidObjectId(scheduledToId)) {
+        //     return res.status(400).json({
+        //         success: false,
+        //         message: "Invalid ID format",
+        //     });
+        // }
         // 🔍 scheduledToId (direct filter)
         if (scheduledToId) {
             query.scheduledTo = scheduledToId;
@@ -757,7 +681,23 @@ export const getScheduledCalls = async (req, res) => {
         if (recipientNumber) {
             query.recipientNumber = { $regex: recipientNumber, $options: "i" };
         }
+        // 🔍 ScheduledAt
+        if (req.query.scheduledAt) {
+            const inputDate = new Date(req.query.scheduledAt);
 
+            if (isNaN(inputDate.getTime())) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Invalid scheduledAt format",
+                });
+            }
+
+            // दिन की शुरुआत और अंत निकालना (IST या जो भी timezone में आपने date भेजा है)
+            const startOfDay = new Date(inputDate.setHours(0, 0, 0, 0));
+            const endOfDay = new Date(inputDate.setHours(23, 59, 59, 999));
+
+            query.scheduledAt = { $gte: startOfDay, $lte: endOfDay };
+        }
         // 🔍 scheduledAt range
         if (scheduledAtBeetweenStartDate || scheduledAtBeetweenEndDate) {
             query.scheduledAt = {};

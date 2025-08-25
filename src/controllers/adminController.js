@@ -3,14 +3,11 @@ import FamilyMember from '../models/FamilyMember.js';
 import ScheduledCall from '../models/scheduledCallSummary.js';
 import { cancelScheduledCall } from '../jobs/callScheduler.js';
 import { isValidObjectId } from '../utils/validationUtils.js';
-// GET /api/users
-// Example: /api/users?role=admin&isVerified=true&search=john&page=2&limit=10&sort=-createdAt
-// controllers/adminController.js
 
 export const getUsers = async (req, res) => {
     try {
-        const { page = 1, limit = 10, role, isVerified, name, email, phoneNumber, createdAtInBetweenStartDate, createdAtInBetweenEndDate, familyMemberName, familyMemberCount } = req.query;
-
+        const { page = 1, limit = 10, isVerified, name, email, phoneNumber, createdAtInBetweenStartDate, createdAtInBetweenEndDate, familyMemberName, familyMemberCount } = req.query;
+        const role = 'user'
         const query = {};
 
         // Normal user filters
@@ -206,7 +203,7 @@ export const familyMembers = async (req, res) => {
     }
 };
 
-// --- API 6: Get Single Specific Family Member by ID ---
+
 export const getSingleFamilyMember = async (req, res) => {
     try {
         const { id } = req.params; // Family Member ID from URL parameter
@@ -238,7 +235,7 @@ export const getSingleFamilyMember = async (req, res) => {
     }
 };
 
-// --- API 7: Delete a User and their linked Family Members ---
+
 export const deleteUser = async (req, res) => {
     try {
         const { id } = req.params; // User ID from URL parameter
@@ -368,148 +365,6 @@ export const deleteFamilyMember = async (req, res) => {
     }
 };
 
-// --- API 7: Calls Scheduled ---
-export const getScheduledCalls = async (req, res) => {
-    try {
-        const {
-            page = 1,
-            limit = 10,
-            recipientName,
-            scheduledByName,
-            scheduledToName,
-            recipientNumber,
-            scheduledAtBeetweenStartDate,//scheduledAtBeetweenStartDate
-            scheduledAtBeetweenEndDate,//scheduledAtBeetweenEndDate
-            durationInSeconds,
-            minDuration,
-            maxDuration,
-            startBetweenStartTime,//startBetweenStartTime
-            startBetweenEndTime,//startBetweenEndTime
-            endBetweenStartTime,//endBetweenStartTime
-            endBetweenEndTime,//endBetweenEndTime
-            status,
-            triesLeft,
-        } = req.query;
-
-        const query = {};
-
-        // 🔍 recipientName
-        if (recipientName) {
-            query.recipientName = { $regex: recipientName, $options: "i" };
-        }
-
-        // 🔍 scheduledByName 
-        if (scheduledByName) {
-            const users = await User.find({
-                name: { $regex: scheduledByName, $options: "i" },
-            }).select("_id");
-            const ids = users.map((u) => u._id);
-            if (ids.length > 0) {
-                query.scheduledBy = { $in: ids };
-            } else {
-                return res.json({
-                    success: true,
-                    data: [],
-                    total: 0,
-                    page: Number(page),
-                    limit: Number(limit),
-                });
-            }
-        }
-
-        // 🔍 scheduledToName 
-        if (scheduledToName) {
-            const fms = await FamilyMember.find({
-                name: { $regex: scheduledToName, $options: "i" },
-            }).select("_id");
-            const ids = fms.map((f) => f._id);
-            if (ids.length > 0) {
-                query.scheduledTo = { $in: ids };
-            } else {
-                return res.json({
-                    success: true,
-                    data: [],
-                    total: 0,
-                    page: Number(page),
-                    limit: Number(limit),
-                });
-            }
-        }
-
-        // 🔍 recipientNumber
-        if (recipientNumber) {
-            query.recipientNumber = { $regex: recipientNumber, $options: "i" };
-        }
-
-        // 🔍 scheduledAt range
-        if (scheduledAtBeetweenStartDate || scheduledAtBeetweenEndDate) {
-            query.scheduledAt = {};
-            if (scheduledAtBeetweenStartDate)
-                query.scheduledAt.$gte = new Date(scheduledAtBeetweenStartDate);
-            if (scheduledAtBeetweenEndDate)
-                query.scheduledAt.$lte = new Date(scheduledAtBeetweenEndDate);
-        }
-
-        // 🔍 durationInSeconds
-        if (durationInSeconds) {
-            query.durationInSeconds = Number(durationInSeconds);
-        }
-
-        // 🔍 durationInSeconds
-        if (minDuration || maxDuration) {
-            query.durationInSeconds = {};
-            if (minDuration) query.durationInSeconds.$gte = Number(minDuration);
-            if (maxDuration) query.durationInSeconds.$lte = Number(maxDuration);
-        }
-        // 🔍 startTime range
-        if (startBetweenStartTime || startBetweenEndTime) {
-            query.startTime = {};
-            if (startBetweenStartTime) query.startTime.$gte = new Date(startBetweenStartTime);
-            if (startBetweenEndTime) query.startTime.$lte = new Date(startBetweenEndTime);
-        }
-
-        // 🔍 endTime range
-        if (endBetweenStartTime || endBetweenEndTime) {
-            query.endTime = {};
-            if (endBetweenStartTime) query.endTime.$gte = new Date(endBetweenStartTime);
-            if (endBetweenEndTime) query.endTime.$lte = new Date(endBetweenEndTime);
-        }
-
-        // 🔍 status
-        if (status) {
-            query.status = status;
-        }
-
-        // 🔍 triesLeft
-        if (triesLeft !== undefined) {
-            query.triesLeft = Number(triesLeft);
-        }
-
-        // Pagination + Populate
-        const calls = await ScheduledCall.find(query)
-            .populate("scheduledBy", "name email phoneNumber")
-            .populate("scheduledTo", "name email phoneNumber")
-            .skip((page - 1) * limit)
-            .limit(Number(limit))
-            .sort({ createdAt: -1 });
-
-        const total = await ScheduledCall.countDocuments(query);
-
-        res.json({
-            success: true,
-            data: calls,
-            total,
-            page: Number(page),
-            limit: Number(limit),
-        });
-    } catch (error) {
-        console.error("Error fetching scheduled calls:", error);
-        res
-            .status(500)
-            .json({ success: false, message: "Server Error", error: error.message });
-    }
-};
-
 export const deleteScheduledCall = async (req, res) => {
     try {
         const { id } = req.params;
@@ -550,10 +405,121 @@ export const deleteScheduledCall = async (req, res) => {
     }
 };
 
+export const getScheduledCalls = async (req, res) => {
+    try {
+        const {
+            page = 1,
+            limit = 10,
+            recipientName,
+            scheduledByName,
+            scheduledToName,
+            recipientNumber,
+            scheduledAtBeetweenStartDate,
+            scheduledAtBeetweenEndDate,
+            durationInSeconds,
+            minDuration,
+            maxDuration,
+            startBetweenStartTime,
+            startBetweenEndTime,
+            endBetweenStartTime,
+            endBetweenEndTime,
+            status,
+            triesLeft,
+        } = req.query;
 
+        const query = {};
 
+        // 🔍 String searches (case-insensitive)
+        if (recipientName) query.recipientName = { $regex: recipientName, $options: "i" };
+        if (recipientNumber) query.recipientNumber = { $regex: recipientNumber, $options: "i" };
 
+        // 🔍 Search by related User name
+        if (scheduledByName) {
+            const users = await User.find({ name: { $regex: scheduledByName, $options: "i" } }).select("_id");
+            const userIds = users.map((u) => u._id);
+            if (userIds.length > 0) {
+                query.scheduledBy = { $in: userIds };
+            } else {
+                return res.json({ success: true, data: [], total: 0, page: Number(page), limit: Number(limit) });
+            }
+        }
 
+        // 🔍 Search by related Family Member name
+        if (scheduledToName) {
+            const fms = await FamilyMember.find({ name: { $regex: scheduledToName, $options: "i" } }).select("_id");
+            const fmIds = fms.map((f) => f._id);
+            if (fmIds.length > 0) {
+                query.scheduledTo = { $in: fmIds };
+            } else {
+                return res.json({ success: true, data: [], total: 0, page: Number(page), limit: Number(limit) });
+            }
+        }
 
+        // 🔍 Date ranges
+        if (scheduledAtBeetweenStartDate || scheduledAtBeetweenEndDate) {
+            query.scheduledAt = {};
+            if (scheduledAtBeetweenStartDate) query.scheduledAt.$gte = new Date(scheduledAtBeetweenStartDate);
+            if (scheduledAtBeetweenEndDate) query.scheduledAt.$lte = new Date(scheduledAtBeetweenEndDate);
+        }
+        if (startBetweenStartTime || startBetweenEndTime) {
+            query.startTime = {};
+            if (startBetweenStartTime) query.startTime.$gte = new Date(startBetweenStartTime);
+            if (startBetweenEndTime) query.startTime.$lte = new Date(startBetweenEndTime);
+        }
+        if (endBetweenStartTime || endBetweenEndTime) {
+            query.endTime = {};
+            if (endBetweenStartTime) query.endTime.$gte = new Date(endBetweenStartTime);
+            if (endBetweenEndTime) query.endTime.$lte = new Date(endBetweenEndTime);
+        }
 
+        // 👇 YAHAN BADLAV KIYA GAYA HAI: Filter logic theek ki gayi hai
+        // 🔍 Duration filter (correct logic)
+        if (durationInSeconds) {
+            query.durationInSeconds = Number(durationInSeconds);
+        } else if (minDuration || maxDuration) {
+            query.durationInSeconds = {};
+            if (minDuration) query.durationInSeconds.$gte = Number(minDuration);
+            if (maxDuration) query.durationInSeconds.$lte = Number(maxDuration);
+        }
 
+        // 🔍 Exact match filters
+        if (status) query.status = status;
+        if (triesLeft !== undefined) query.triesLeft = Number(triesLeft);
+
+        // --- Database Query ---
+        const total = await ScheduledCall.countDocuments(query);
+        const calls = await ScheduledCall.find(query)
+            .populate("scheduledBy", "name email phoneNumber")
+            .populate("scheduledTo", "name email phoneNumber")
+            .skip((page - 1) * limit)
+            .limit(Number(limit))
+            .sort({ createdAt: -1 })
+            .lean(); // .lean() for better performance and easier object manipulation
+
+        // 👇 YAHAN BADLAV KIYA GAYA HAI: null values ko "N/A" se replace karein
+        // --- Format Response Data ---
+        const formattedData = calls.map(call => {
+            const formattedCall = { ...call };
+            Object.keys(formattedCall).forEach(key => {
+                if (formattedCall[key] === null) {
+                    formattedCall[key] = "N/A";
+                }
+            });
+            // Ensure populated fields are not null
+            if (!formattedCall.scheduledBy) formattedCall.scheduledBy = { name: "N/A", email: "N/A", phoneNumber: "N/A" };
+            if (!formattedCall.scheduledTo) formattedCall.scheduledTo = { name: "N/A", email: "N/A", phoneNumber: "N/A" };
+            return formattedCall;
+        });
+
+        res.json({
+            success: true,
+            data: formattedData, // Send formatted data
+            total,
+            page: Number(page),
+            limit: Number(limit),
+        });
+    } catch (error) {
+        console.error("Error fetching scheduled calls:", error);
+        res.status(500).json({ success: false, message: "Server Error", error: error.message });
+    }
+};

@@ -3,6 +3,7 @@ import dotenv from 'dotenv';
 import cors from 'cors';
 import mainRoutes from './routes/index.js';
 import { notFound, errorHandler } from './middlewares/errorMiddleware.js';
+import { serverCheck } from './controllers/serverController.js';
 dotenv.config();
 
 const app = express();
@@ -16,6 +17,7 @@ app.use(cors()); // enable Cors for all origins
 // --- Routes ---
 // all API routes will be handled by '/api' prefix 
 app.use('/api', mainRoutes);
+app.use('/serverCheck', serverCheck);
 
 app.use(notFound);
 // --- Error Handling Middlewares ---
