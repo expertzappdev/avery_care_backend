@@ -546,6 +546,7 @@ export const deleteScheduledCall = async (req, res) => {
         });
     }
 };
+
 export const updateScheduledCall = async (req, res) => {
     try {
         const { id } = req.params;

@@ -7,9 +7,9 @@ import { isValidOtp, isValidGmail, isValidPhone } from '../utils/validationUtils
 import { sendOtpSms } from '../config/smsConfig.js';
 import { generateLogAndSendEmail } from '../utils/logger.js';
 import { sendEmail } from '../config/emailConfig.js';
+
 const registerUser = asyncHandler(async (req, res) => {
 	const { name, email, phoneNumber, password, role } = req.body;
-
 
 	if (!name || !email || !phoneNumber || !password) {
 		res.status(400);
@@ -28,15 +28,15 @@ const registerUser = asyncHandler(async (req, res) => {
 
 	// --- Step 2: Uniqueness Checks ---
 	const userExistsByEmail = await User.findOne({ email });
-	if (userExistsByEmail && isVerified) {
+	if (userExistsByEmail && userExistsByEmail.isVerified) {
 		res.status(400);
-		throw new Error('User already exists with this email.');
+		throw new Error('A verified user with this email already exists.');
 	}
-
+	
 	const userExistsByPhone = await User.findOne({ phoneNumber });
-	if (userExistsByPhone) {
+	if (userExistsByPhone && userExistsByPhone.isVerified) {
 		res.status(400);
-		throw new Error('Phone number is already used by another user.');
+		throw new Error('A verified user with this phoneNumber already exists.');
 	}
 
 	// --- Step 3: FamilyMember Matching ---
@@ -104,7 +104,7 @@ const registerUser = asyncHandler(async (req, res) => {
 		isVerified: false,  // default false until verified via  OTP
 	});
 
-	
+
 	if (linkedFamilyMemberEntry) {
 		linkedFamilyMemberEntry.isUser = true;
 		linkedFamilyMemberEntry.userId = user._id;
