@@ -467,75 +467,6 @@ export const getAllScheduledCalls = async (req, res) => {
     }
 };
 
-export const updateScheduledCall = async (req, res) => {
-    try {
-        const { id } = req.params;
-        const { scheduledAt } = req.body;
-        console.log(`Controller: Attempting to update scheduled call with ID: ${id}`);
-
-        if (!id || !scheduledAt) {
-            console.error('Controller: Missing required fields for updating scheduled call.');
-            return res.status(400).json({ message: 'ID and scheduledAt are required.' });
-        }
-
-        if (!isValidObjectId(id)) {
-            return res.status(400).json({
-                success: false,
-                message: "Invalid ID format",
-            });
-        }
-
-        if (!isValidISOStringDate(scheduledAt)) {
-            console.error("❌ Invalid time format.");
-            return res.status(400).json({
-                success: false,
-                message: 'Invalid time format. Expected HH:mm (24-hour) format'
-            });
-        }
-        const call = await ScheduledCall.findById(id);
-
-        if (!call) {
-            console.log(`Controller: Scheduled call with ID ${id} not found.`);
-            // User requested a specific message for this case
-            return res.status(404).json({ message: 'No scheduled call found.' });
-        }
-        const primaryUserId = req.user._id;
-
-        if (primaryUserId.toString() !== call.scheduledBy.toString()) {
-            console.log(`❌ User ${primaryUserId} is not the owner of call ${call._id}, cannot update.`);
-
-            return res.status(403).json({ message: 'You are not authorised to update this call.' });
-        }
-
-        if (call.status !== 'pending' && call.status !== 'in-progress') {
-            console.log(`Controller: Call status is not pending. Cannot update. Current status: ${call.status}`);
-            return res.status(400).json({ message: `Cannot update pending or in-progress call. Status is ${call.status}.` });
-        }
-
-        // Agar sab sahi hai, to scheduledAt ko update karo
-        const newScheduledAt = new Date(scheduledAt);
-        call.scheduledAt = newScheduledAt;
-        call.scheduledAtHistory.push(newScheduledAt);
-
-        await call.save();
-
-        console.log(`Controller: Successfully updated scheduled call with ID: ${id}. New scheduled time: ${call.scheduledAt.toISOString()}`);
-
-        // Naye time ke liye call ko reschedule karo
-        scheduleNewCall(call);
-
-        res.status(200).json({
-            status: 'success',
-            message: 'Scheduled call updated successfully.',
-            data: { call },
-        });
-
-    } catch (error) {
-        console.error('Controller: Error updating scheduled call.', error.message);
-        res.status(500).json({ message: 'Server error updating scheduled call.' });
-    }
-};
-
 export const deleteScheduledCall = async (req, res) => {
     try {
         const { id } = req.params; // call id
@@ -613,6 +544,74 @@ export const deleteScheduledCall = async (req, res) => {
             status: 'error',
             message: 'Server error deleting scheduled call.'
         });
+    }
+};
+export const updateScheduledCall = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { scheduledAt } = req.body;
+        console.log(`Controller: Attempting to update scheduled call with ID: ${id}`);
+
+        if (!id || !scheduledAt) {
+            return res.status(400).json({ message: 'ID and scheduledAt are required.' });
+        }
+
+        if (!isValidObjectId(id)) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid ID format",
+            });
+        }
+
+        if (!isValidISOStringDate(scheduledAt)) { // Make sure this function exists and is correct
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid time format. Expected ISO String format'
+            });
+        }
+
+        const call = await ScheduledCall.findById(id);
+
+        if (!call) {
+            return res.status(404).json({ message: 'No scheduled call found.' });
+        }
+
+        const primaryUserId = req.user._id;
+
+        if (primaryUserId.toString() !== call.scheduledBy.toString()) {
+            return res.status(403).json({ message: 'You are not authorised to update this call.' });
+        }
+
+        // --- YEH HAI FIX ---
+        // Ab hum sirf 'pending' status wali calls ko hi update karenge.
+        if (call.status !== 'pending') {
+            console.log(`Controller: Call status is not pending. Cannot update. Current status: ${call.status}`);
+            return res.status(400).json({
+                message: `Aap is call ko update nahi kar sakte kyunki yeh 'pending' status mein nahi hai. Iska current status hai: ${call.status}.`
+            });
+        }
+
+        // Agar sab sahi hai, to scheduledAt ko update karo
+        const newScheduledAt = new Date(scheduledAt);
+        call.scheduledAt = newScheduledAt;
+        call.scheduledAtHistory.push(newScheduledAt);
+
+        await call.save();
+
+        console.log(`Controller: Successfully updated scheduled call with ID: ${id}. New scheduled time: ${call.scheduledAt.toISOString()}`);
+
+        // Naye time ke liye call ko reschedule karo
+        scheduleNewCall(call);
+
+        res.status(200).json({
+            status: 'success',
+            message: 'Scheduled call updated successfully.',
+            data: { call },
+        });
+
+    } catch (error) {
+        console.error('Controller: Error updating scheduled call.', error.message);
+        res.status(500).json({ message: 'Server error updating scheduled call.' });
     }
 };
 
