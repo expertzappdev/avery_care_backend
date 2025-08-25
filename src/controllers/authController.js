@@ -48,7 +48,6 @@ const registerUser = asyncHandler(async (req, res) => {
 				user.mobileOtp = mobileOtp;
 				user.otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000);
 
-				// ... aapka OTP regenerate karne wala code yahan aayega ...
 				await user.save();
 				res.status(201).json({
 					success: true,
@@ -57,9 +56,7 @@ const registerUser = asyncHandler(async (req, res) => {
 					email: user.email,
 					phoneNumber: user.phoneNumber,
 					role: user.role,
-					message: linkedFamilyMemberEntry
-						? 'User OTP sent to email & mobile for Verification.'
-						: 'User registered successfully, Verification Required OTP Sent.',
+					message: "User registered successfully, Verification Required OTP sent to email."
 				});
 			}
 		} else {
