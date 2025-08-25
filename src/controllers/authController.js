@@ -49,7 +49,7 @@ const registerUser = asyncHandler(async (req, res) => {
 				user.otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000);
 
 				await user.save();
-				res.status(201).json({
+				return res.status(201).json({
 					success: true,
 					_id: user._id,
 					name: user.name,
@@ -87,7 +87,7 @@ const registerUser = asyncHandler(async (req, res) => {
 		);
 
 		if (exactMatch) {
-			linkedFamilyMemberEntry = exactMatch;
+			linkedFamilyMemberEntry = exactMatch._id;
 		} else {
 			if (matchingUnlinkedFamilyMembers.some(fm => fm.email === email && fm.phoneNumber !== phoneNumber)) {
 				res.status(400);
@@ -133,19 +133,10 @@ const registerUser = asyncHandler(async (req, res) => {
 		role,
 		emailOtp,
 		mobileOtp,
+		isAFamilyMember: linkedFamilyMemberEntry,
 		otpExpiresAt,
 		isVerified: false,  // default false until verified via  OTP
 	});
-
-
-	if (linkedFamilyMemberEntry) {
-		linkedFamilyMemberEntry.isUser = true;
-		linkedFamilyMemberEntry.userId = user._id;
-		linkedFamilyMemberEntry.name = user.name;
-		linkedFamilyMemberEntry.email = user.email;
-		linkedFamilyMemberEntry.phoneNumber = user.phoneNumber;
-		await linkedFamilyMemberEntry.save();
-	}
 
 	res.status(201).json({
 		success: true,
@@ -217,7 +208,17 @@ const verifyOtp = asyncHandler(async (req, res) => {
 	user.otpExpiresAt = null;
 
 	await user.save();
-
+	if (user.isAFamilyMember) {
+		const linkedFamilyMemberEntry = await FamilyMember.findById(user.isAFamilyMember)
+		if (linkedFamilyMemberEntry) {
+			linkedFamilyMemberEntry.isUser = true;
+			linkedFamilyMemberEntry.userId = user._id;
+			linkedFamilyMemberEntry.name = user.name;
+			linkedFamilyMemberEntry.email = user.email;
+			linkedFamilyMemberEntry.phoneNumber = user.phoneNumber;
+			await linkedFamilyMemberEntry.save();
+		}
+	}
 	res.status(200).json({
 		success: true,
 		message: 'OTP verified successfully. User Registered and Verified Successfully',

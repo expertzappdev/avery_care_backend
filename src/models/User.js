@@ -45,7 +45,10 @@ const userSchema = new mongoose.Schema(
 			type: String,
 			default: null,
 		},
-
+		isAFamilyMember:{
+			type: String,
+			default: null,
+		},
 		familyMembers: [
 			{
 				relationship: {
