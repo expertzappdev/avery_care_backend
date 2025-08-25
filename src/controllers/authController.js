@@ -28,17 +28,53 @@ const registerUser = asyncHandler(async (req, res) => {
 
 	// --- Step 2: Uniqueness Checks ---
 	const userExistsByEmail = await User.findOne({ email });
-	if (userExistsByEmail && userExistsByEmail.isVerified) {
-		res.status(400);
-		throw new Error('A verified user with this email already exists.');
-	}
-	
 	const userExistsByPhone = await User.findOne({ phoneNumber });
-	if (userExistsByPhone && userExistsByPhone.isVerified) {
-		res.status(400);
-		throw new Error('A verified user with this phoneNumber already exists.');
-	}
 
+
+	if (userExistsByEmail && userExistsByPhone) {
+		// Case 1: Agar email aur phone dono ek hi user ke hain
+		if (userExistsByEmail._id.toString() === userExistsByPhone._id.toString()) {
+			if (userExistsByEmail.isVerified) {
+				// user verified,error
+				res.status(400);
+				throw new Error('A verified user with this email and phone number already exists.');
+			} else {
+				// if user is unverified , OTP regenerate 
+				console.log("Same unverified user found. Regenerating OTP.");
+				const user = userExistsByEmail;
+				const emailOtp = generateOTP();
+				const mobileOtp = generateOTP();
+				user.emailOtp = emailOtp;
+				user.mobileOtp = mobileOtp;
+				user.otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000);
+
+				// ... aapka OTP regenerate karne wala code yahan aayega ...
+				await user.save();
+				res.status(201).json({
+					success: true,
+					_id: user._id,
+					name: user.name,
+					email: user.email,
+					phoneNumber: user.phoneNumber,
+					role: user.role,
+					message: linkedFamilyMemberEntry
+						? 'User OTP sent to email & mobile for Verification.'
+						: 'User registered successfully, Verification Required OTP Sent.',
+				});
+			}
+		} else {
+			// Case 2: email phone users are different
+			res.status(400);
+			throw new Error('This email and phone number are associated with different accounts.');
+		}
+	} else if (userExistsByEmail) {
+		// Case 3: email exist
+		res.status(400);
+		throw new Error('This email is already associated with an account.');
+	} else if (userExistsByPhone) {
+		// Case 4: phone number exists
+		throw new Error('This phone number is already associated with an account.');
+	}
 	// --- Step 3: FamilyMember Matching ---
 	let linkedFamilyMemberEntry = null;
 
