@@ -151,7 +151,6 @@ const registerUser = asyncHandler(async (req, res) => {
 	});
 });
 
-
 const verifyOtp = asyncHandler(async (req, res) => {
 	const { email, emailOtp, mobileOtp } = req.body;
 	console.log("api hit")
@@ -226,7 +225,6 @@ const verifyOtp = asyncHandler(async (req, res) => {
 	});
 });
 
-
 const loginUser = asyncHandler(async (req, res) => {
 	const { email, password } = req.body;
 
@@ -292,7 +290,5 @@ const loginUser = asyncHandler(async (req, res) => {
 		token: generateToken(user._id),
 	});
 });
-
-
 
 export { registerUser, verifyOtp, loginUser };

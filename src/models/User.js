@@ -45,7 +45,7 @@ const userSchema = new mongoose.Schema(
 			type: String,
 			default: null,
 		},
-		isAFamilyMember:{
+		isAFamilyMember: {
 			type: String,
 			default: null,
 		},
